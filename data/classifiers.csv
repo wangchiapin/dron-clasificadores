@@ -4,6 +4,12 @@
 動物,Animales,鳥,niǎo,pájaro,隻,
 動物,Animales,魚,yú,pez,條,隻
 動物,Animales,馬,mǎ,caballo,匹,隻/條
+動物,Animales,兔子,tùzi,conejo,隻,
+動物,Animales,蛇,shé,serpiente,條,隻
+動物,Animales,牛,niú,vaca,頭,隻
+動物,Animales,老虎,lǎohǔ,tigre,隻,
+動物,Animales,豬,zhū,cerdo,隻,頭
+動物,Animales,蝴蝶,húdié,mariposa,隻,
 物品,Objetos,書,shū,libro,本,部
 物品,Objetos,紙,zhǐ,papel,張,
 物品,Objetos,桌子,zhuōzi,mesa,張,
@@ -17,13 +23,53 @@
 物品,Objetos,電腦,diànnǎo,computadora,台,部
 物品,Objetos,門,mén,puerta,扇,
 物品,Objetos,信,xìn,carta,封,張
+物品,Objetos,筆記本,bǐjìběn,cuaderno,本,
+物品,Objetos,照片,zhàopiàn,foto,張,
+物品,Objetos,手機,shǒujī,celular,支,台
+物品,Objetos,手錶,shǒubiǎo,reloj,支,隻
+物品,Objetos,椅子,yǐzi,silla,張,把
+物品,Objetos,刀子,dāozi,cuchillo,把,
+物品,Objetos,襪子,wàzi,calcetines,雙,隻
+物品,Objetos,手套,shǒutào,guantes,雙,副
+物品,Objetos,牙刷,yáshuā,cepillo de dientes,支,
+物品,Objetos,地圖,dìtú,mapa,張,
+物品,Objetos,票,piào,boleto,張,
+物品,Objetos,床,chuáng,cama,張,
+物品,Objetos,鑰匙,yàoshi,llave,把,
+物品,Objetos,剪刀,jiǎndāo,tijeras,把,
+物品,Objetos,毛巾,máojīn,toalla,條,
+物品,Objetos,裙子,qúnzi,falda,條,
+物品,Objetos,外套,wàitào,chaqueta,件,
+物品,Objetos,行李,xínglǐ,equipaje,件,
+物品,Objetos,冰箱,bīngxiāng,refrigerador,台,
+物品,Objetos,電視,diànshì,televisión,台,
+物品,Objetos,鏡子,jìngzi,espejo,面,
+物品,Objetos,燈,dēng,lámpara,盞,
+物品,Objetos,報紙,bàozhǐ,periódico,份,
 交通,Transporte,車,chē,carro,輛,台/部
 交通,Transporte,飛機,fēijī,avión,架,台
 交通,Transporte,船,chuán,barco,艘,隻/條
+交通,Transporte,腳踏車,jiǎotàchē,bicicleta,輛,
+交通,Transporte,摩托車,mótuōchē,motocicleta,輛,
+交通,Transporte,直升機,zhíshēngjī,helicóptero,架,
 食物,Comida y bebida,咖啡,kāfēi,café,杯,瓶
 食物,Comida y bebida,水,shuǐ,agua,瓶,杯/碗
 食物,Comida y bebida,飯,fàn,arroz,碗,
 食物,Comida y bebida,蛋糕,dàngāo,pastel,塊/片,
+食物,Comida y bebida,牛奶,niúnǎi,leche,杯,瓶
+食物,Comida y bebida,啤酒,píjiǔ,cerveza,瓶,杯
+食物,Comida y bebida,蘋果,píngguǒ,manzana,顆,
+食物,Comida y bebida,雞蛋,jīdàn,huevo,顆,
+食物,Comida y bebida,麵包,miànbāo,pan,個,塊
+食物,Comida y bebida,披薩,pīsà,pizza,片,塊
+食物,Comida y bebida,香蕉,xiāngjiāo,plátano,根,條
+食物,Comida y bebida,湯,tāng,sopa,碗,
+食物,Comida y bebida,麵,miàn,fideos,碗,
+食物,Comida y bebida,茶,chá,té,杯,瓶
+食物,Comida y bebida,可樂,kělè,cola,瓶,杯
+食物,Comida y bebida,橘子,júzi,mandarina,顆,
+食物,Comida y bebida,起司,qǐsī,queso,片,塊
+食物,Comida y bebida,黃瓜,huánggua,pepino,條,根
 自然與其他,Naturaleza y otros,樹,shù,árbol,棵,
 自然與其他,Naturaleza y otros,花,huā,flor,朵,支/把/棵
 自然與其他,Naturaleza y otros,山,shān,montaña,座,
@@ -32,3 +78,24 @@
 自然與其他,Naturaleza y otros,電影,diànyǐng,película,部,
 自然與其他,Naturaleza y otros,歌,gē,canción,首,支
 自然與其他,Naturaleza y otros,人,rén,persona,個,
+自然與其他,Naturaleza y otros,星星,xīngxing,estrella,顆,
+自然與其他,Naturaleza y otros,草,cǎo,pasto,根,棵
+自然與其他,Naturaleza y otros,雲,yún,nube,朵,
+自然與其他,Naturaleza y otros,太陽,tàiyáng,sol,個,顆
+自然與其他,Naturaleza y otros,學校,xuéxiào,escuela,所,間
+自然與其他,Naturaleza y otros,橋,qiáo,puente,座,
+自然與其他,Naturaleza y otros,路,lù,camino,條,
+自然與其他,Naturaleza y otros,問題,wèntí,pregunta,個,
+自然與其他,Naturaleza y otros,夢,mèng,sueño,個,
+自然與其他,Naturaleza y otros,彩虹,cǎihóng,arcoíris,道,
+自然與其他,Naturaleza y otros,閃電,shǎndiàn,relámpago,道,
+自然與其他,Naturaleza y otros,湖,hú,lago,座,
+自然與其他,Naturaleza y otros,城市,chéngshì,ciudad,座,
+自然與其他,Naturaleza y otros,醫院,yīyuàn,hospital,家,間
+自然與其他,Naturaleza y otros,餐廳,cāntīng,restaurante,家,間
+自然與其他,Naturaleza y otros,房間,fángjiān,habitación,間,
+自然與其他,Naturaleza y otros,老師,lǎoshī,profesor,位,
+自然與其他,Naturaleza y otros,客人,kèrén,invitado,位,
+自然與其他,Naturaleza y otros,新聞,xīnwén,noticia,則,
+自然與其他,Naturaleza y otros,比賽,bǐsài,competencia,場,
+自然與其他,Naturaleza y otros,考試,kǎoshì,examen,場,
