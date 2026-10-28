@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>量詞空戰 ¡Dispara al clasificador!</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}</script>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#10140f;color:#b6f5a4;font-family:'Noto Sans TC',sans-serif;touch-action:none;user-select:none;-webkit-user-select:none}
+#c{position:fixed;left:0;top:0;width:100%;height:100%;display:block}
+#hud{position:fixed;left:0;top:0;transform-origin:0 0;pointer-events:none}
+.p{position:absolute;padding:5px 9px;background:rgba(8,12,9,.62);border:1px solid rgba(182,245,164,.35);font-family:'Share Tech Mono',monospace;font-size:12px}
+.p small{display:block;font-size:11px;color:#8fcf80;letter-spacing:1px}
+.p b{font-weight:400;font-size:20px;color:#f1fbec}
+.row{display:flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:#ff6a4d}
+.life{display:flex;gap:4px}.life i{width:10px;height:10px;border:1px solid #b6f5a4}.life i.on{background:#b6f5a4}
+#prompt{left:50%;top:16px;width:360px;margin-left:-180px;padding:8px 14px 9px;background:rgba(8,12,9,.7);border-color:rgba(182,245,164,.5);text-align:center;font-family:'Noto Sans TC',sans-serif}
+#prompt .top{display:flex;justify-content:space-between;font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:1px;color:#8fcf80}
+#pz{margin-top:3px;font-size:26px;font-weight:700;color:#f1fbec;letter-spacing:2px;line-height:1.25}
+#pp{font-family:'Share Tech Mono',monospace;font-size:13px;color:#8fcf80;min-height:0}
+#pe{margin-top:2px;display:flex;align-items:center;justify-content:center;gap:7px;font-size:14px;color:#b6f5a4}
+button{font-family:inherit}
+.spk{pointer-events:auto;background:transparent;border:1px solid rgba(182,245,164,.6);color:#b6f5a4;border-radius:6px;width:44px;height:30px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.hbtn{pointer-events:auto;cursor:pointer;color:#b6f5a4;background:rgba(8,12,9,.62);border:1px solid rgba(182,245,164,.35);font-size:13px;min-height:34px;padding:0 12px}
+.joy{position:absolute;bottom:28px;width:104px;height:104px;border-radius:50%;border:2px solid rgba(182,245,164,.55);background:rgba(8,12,9,.4);pointer-events:auto;touch-action:none}
+.joy .k{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;background:rgba(182,245,164,.28);border:2px solid #b6f5a4}
+.joy .l{position:absolute;left:-20px;right:-20px;top:-22px;text-align:center;font-size:12px;color:#b6f5a4;pointer-events:none}
+#calib{position:absolute;right:36px;bottom:40px;width:104px;height:80px;display:none;flex-direction:column;align-items:center;justify-content:center;gap:4px;pointer-events:auto;cursor:pointer;color:#f1fbec;background:rgba(8,12,9,.5);border:2px solid rgba(182,245,164,.55);border-radius:12px;font-size:15px;font-weight:700}
+#calib small{font-size:11px;font-weight:400;color:#b6f5a4}
+#fb{position:absolute;left:0;right:0;top:112px;text-align:center;font-size:34px;font-weight:700;letter-spacing:2px;text-shadow:0 2px 8px #000;opacity:0;transition:opacity .15s}
+#fb.show{opacity:1}#fb.good{color:#b6f5a4}#fb.bad{color:#ffb347}
+#fb small{display:block;font-size:16px;font-weight:400;color:#f1fbec;letter-spacing:1px}
+#toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:rgba(8,12,9,.85);border:1px solid rgba(182,245,164,.5);padding:8px 14px;font-size:14px;color:#f1fbec;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20;text-align:center}
+#toast.show{opacity:1}
+.ov{position:fixed;inset:0;background:rgba(10,14,11,.9);display:flex;align-items:center;justify-content:center;z-index:10;padding:10px}
+.ov[hidden]{display:none}
+.card{width:100%;max-width:560px;max-height:100%;overflow:auto;padding:16px 20px;border:1px solid rgba(182,245,164,.5);background:rgba(8,12,9,.9);color:#e9f7e3}
+.card h1{margin:0 0 2px;font-size:22px;letter-spacing:2px;color:#f1fbec}
+.card .sub{font-size:13px;color:#8fcf80;margin-bottom:10px}
+.card h2{margin:10px 0 5px;font-size:12px;font-weight:400;color:#8fcf80;letter-spacing:1px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{cursor:pointer;color:#b6f5a4;background:transparent;border:1px solid rgba(182,245,164,.45);padding:5px 12px;font-size:15px;line-height:1.2;min-height:40px}
+.chip small{display:block;font-size:11px;color:#8fcf80}
+.chip.on{background:#b6f5a4;color:#10140f}.chip.on small{color:#2c4a28}
+.opts{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:14px}
+.opts label{display:flex;align-items:center;gap:6px;min-height:30px}
+.opts input{width:18px;height:18px;accent-color:#b6f5a4}
+.go{margin-top:14px;width:100%;min-height:50px;font-size:20px;font-weight:700;letter-spacing:3px;cursor:pointer;color:#10140f;background:#b6f5a4;border:0}
+.go small{display:block;font-size:12px;font-weight:400;letter-spacing:1px}
+.note{font-size:12px;color:#8fcf80;margin-top:6px;line-height:1.5}
+#end .big{font-size:40px;font-family:'Share Tech Mono',monospace;color:#f1fbec;margin:4px 0}
+#end .btns{display:flex;gap:8px;margin-top:12px}
+#end .btns button{flex:1;min-height:48px;font-size:16px;cursor:pointer}
+#fire{position:absolute;right:160px;bottom:34px;width:84px;height:84px;border-radius:50%;pointer-events:auto;cursor:pointer;display:none;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#f1fbec;background:rgba(255,106,77,.22);border:2px solid #ff8a6d;font-size:15px;font-weight:700;touch-action:none;padding:0}
+#fire:active{background:rgba(255,106,77,.55)}
+select{font:inherit;font-size:15px;min-height:36px;color:#b6f5a4;background:#10140f;border:1px solid rgba(182,245,164,.45);padding:2px 8px}
+#rotate{z-index:30;text-align:center;font-size:20px;line-height:1.7;color:#f1fbec}
+#rotate small{display:block;font-size:14px;color:#8fcf80}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div class="p" style="left:22px;top:20px;padding:0;background:none;border:0">
+    <div class="p row" style="position:static;letter-spacing:1px"><span class="dot"></span><span>REC ・ FPV-01</span><span id="tm" style="color:#e9f7e3">00:00</span></div>
+    <div class="p row" style="position:static;margin-top:6px;font-family:'Noto Sans TC',sans-serif"><span>得分</span><span id="sc" style="font-family:'Share Tech Mono',monospace;font-size:14px;color:#e9f7e3">0000</span><span class="life" id="lf" style="margin-left:4px"></span></div>
+  </div>
+
+  <div class="p" id="prompt">
+    <div class="top"><span id="pm">MISSION 01 / 10</span><span id="pc">答對 0</span></div>
+    <div id="pz">&nbsp;</div>
+    <div id="pp"></div>
+    <div id="pe"><button type="button" class="spk" id="spk" aria-label="再聽一次"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="#b6f5a4" stroke-width="1.5" aria-hidden="true"><path d="M2 6h3l4-3v10l-4-3H2z"/><path d="M11.5 5.5c1.2 1.4 1.2 3.6 0 5"/></svg></button><span id="ps"></span></div>
+  </div>
+
+  <div style="position:absolute;right:22px;top:20px;display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+    <button type="button" class="hbtn" id="menuBtn">選單 / Menú</button>
+    <div class="p" style="position:static;text-align:right"><small>HDG 方向</small><span id="hd" style="font-size:16px;color:#f1fbec">N 000</span></div>
+  </div>
+
+  <div class="p" style="left:22px;top:150px"><small>ALT 高度</small><b id="alt">12 m</b></div>
+  <div class="p" style="right:22px;top:150px;text-align:right"><small>SPD 速度</small><b id="spd">0 km/h</b></div>
+
+  <svg style="position:absolute;left:50%;top:50%;margin:-30px 0 0 -30px" width="60" height="60" viewBox="-30 -30 60 60" fill="none" stroke="#b6f5a4" stroke-width="1.6" aria-hidden="true">
+    <circle r="15"/><line x1="0" y1="-25" x2="0" y2="-15"/><line x1="0" y1="15" x2="0" y2="25"/><line x1="-25" y1="0" x2="-15" y2="0"/><line x1="15" y1="0" x2="25" y2="0"/><circle r="1.6" fill="#b6f5a4"/>
+  </svg>
+  <div id="fb"></div>
+
+  <div class="joy" id="ls" style="left:36px"><div class="k"></div><div class="l">升降 ・ 轉向</div></div>
+  <div class="joy" id="rs" style="right:36px"><div class="k"></div><div class="l">前後 ・ 左右</div></div>
+  <button type="button" id="calib">校準<small>把手機拿平穩後按</small></button>
+  <div class="p" id="ammoP" style="left:22px;top:96px;display:none"><small>AMMO 彈藥</small><span id="ammo" style="font-size:16px;color:#f1fbec;letter-spacing:3px"></span></div>
+  <button type="button" id="fire" aria-label="射擊"><svg width="26" height="26" viewBox="-13 -13 26 26" fill="none" stroke="#ffb3a0" stroke-width="1.8" aria-hidden="true"><circle r="7"/><line x1="0" y1="-12" x2="0" y2="-7"/><line x1="0" y1="7" x2="0" y2="12"/><line x1="-12" y1="0" x2="-7" y2="0"/><line x1="7" y1="0" x2="12" y2="0"/></svg><span>射擊</span></button>
+</div>
+
+<div id="toast"></div>
+
+<div class="ov" id="menu">
+  <div class="card">
+    <h1>量詞空戰</h1>
+    <div class="sub">¡Dispara al clasificador!　用無人機練習量詞</div>
+    <h2>玩法 / Modo</h2>
+    <div class="chips" id="modes"></div>
+    <div id="shootOpts">
+      <h2>量詞範圍 / Clasificadores</h2>
+      <div class="chips" id="groups"></div>
+      <div class="opts" style="margin-top:6px"><label>只練這個量詞 <select id="mwSel" aria-label="只練這個量詞"></select></label></div>
+    </div>
+    <div id="gateOpts">
+      <h2>主題 / Tema</h2>
+      <div class="chips" id="sets"></div>
+    </div>
+    <h2>操作 / Control</h2>
+    <div class="chips" id="ctrls"></div>
+    <div class="opts" id="tiltOpts" style="margin-top:6px"><label><input type="checkbox" id="optInvF">前後反過來</label><label><input type="checkbox" id="optInvR">左右反過來</label></div>
+    <h2>選項 / Opciones</h2>
+    <div class="opts"><label><input type="checkbox" id="optPy">顯示拼音 pinyin</label><label><input type="checkbox" id="optListen">聽力模式 escucha</label></div>
+    <div class="note" id="voiceNote"></div>
+    <button type="button" class="go" id="go">出發<small>Despegar</small></button>
+    <div class="note">電腦玩：W S 前後、A D 左右、↑ ↓ 升降、← → 轉向（或 Q E）。射擊：空白鍵或點滑鼠，R 換彈。手機：點「射擊」鈕。</div>
+  </div>
+</div>
+
+<div class="ov" id="end" hidden>
+  <div class="card" style="text-align:center">
+    <h1 id="endT">任務結束</h1>
+    <div class="big" id="endS">0</div>
+    <div class="sub" id="endC"></div>
+    <div class="btns">
+      <button type="button" class="chip on" id="again">再玩一次<small>Jugar de nuevo</small></button>
+      <button type="button" class="chip" id="toMenu">回選單<small>Menú</small></button>
+    </div>
+  </div>
+</div>
+
+<div class="ov" id="rotate" hidden><div>請把手機橫放<small>Gira el teléfono en horizontal</small></div></div>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ---------- 題庫 ---------- */
+const RAW = {
+  '水果': {es:'Frutas', w:[['蘋果','píngguǒ','manzana'],['香蕉','xiāngjiāo','plátano'],['西瓜','xīguā','sandía'],['葡萄','pútáo','uva'],['橘子','júzi','mandarina'],['草莓','cǎoméi','fresa'],['鳳梨','fènglí','piña'],['芒果','mángguǒ','mango']]},
+  '動物': {es:'Animales', w:[['貓','māo','gato'],['狗','gǒu','perro'],['鳥','niǎo','pájaro'],['魚','yú','pez'],['馬','mǎ','caballo'],['兔子','tùzi','conejo'],['老虎','lǎohǔ','tigre'],['猴子','hóuzi','mono']]},
+  '顏色': {es:'Colores', w:[['紅色','hóngsè','rojo'],['藍色','lánsè','azul'],['綠色','lǜsè','verde'],['黃色','huángsè','amarillo'],['白色','báisè','blanco'],['黑色','hēisè','negro'],['紫色','zǐsè','morado'],['粉紅色','fěnhóngsè','rosa']]},
+  '交通': {es:'Transporte', w:[['公車','gōngchē','autobús'],['捷運','jiéyùn','metro'],['火車','huǒchē','tren'],['機車','jīchē','moto'],['腳踏車','jiǎotàchē','bicicleta'],['計程車','jìchéngchē','taxi'],['飛機','fēijī','avión'],['船','chuán','barco']]},
+  '食物': {es:'Comida', w:[['米飯','mǐfàn','arroz'],['麵','miàn','fideos'],['水餃','shuǐjiǎo','empanadillas'],['豆漿','dòujiāng','leche de soja'],['包子','bāozi','pan al vapor'],['蛋','dàn','huevo'],['牛肉麵','niúròumiàn','sopa de fideos con res'],['珍珠奶茶','zhēnzhū nǎichá','té con leche y perlas']]}
+};
+const SETS = {};
+for (const k in RAW) SETS[k] = {es: RAW[k].es, w: RAW[k].w.map(([zh,py,es]) => ({zh,py,es}))};
+
+const TOTAL = 10, GW = 10, GH = 7;
+const $ = id => document.getElementById(id);
+const UP = new THREE.Vector3(0,1,0);
+const clamp = (v,a=-1,b=1) => Math.max(a, Math.min(b, v));
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+const srnd = mulberry(20261027);
+const shuffle = a => { a = a.slice(); for (let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];} return a; };
+
+/* ---------- 量詞題庫（Ben 確認版）---------- */
+// [分類, 名詞, 拼音, 西文, 正確量詞(可多個), 不可當干擾項的量詞(其實也說得通)]
+const MBANK_RAW = [
+['動物','貓','māo','gato',['隻'],[]],
+['動物','狗','gǒu','perro',['隻'],['條']],
+['動物','鳥','niǎo','pájaro',['隻'],[]],
+['動物','魚','yú','pez',['條'],['隻']],
+['動物','馬','mǎ','caballo',['匹'],['隻','條']],
+['物品','書','shū','libro',['本'],['部']],
+['物品','紙','zhǐ','papel',['張'],[]],
+['物品','桌子','zhuōzi','mesa',['張'],[]],
+['物品','衣服','yīfú','ropa',['件'],[]],
+['物品','褲子','kùzi','pantalones',['條'],['件']],
+['物品','雨傘','yǔsǎn','paraguas',['把'],['支']],
+['物品','鞋子','xiézi','zapatos',['雙'],['隻']],
+['物品','眼鏡','yǎnjìng','gafas',['副'],[]],
+['物品','帽子','màozi','sombrero',['頂'],[]],
+['物品','筆','bǐ','bolígrafo',['支','枝'],[]],
+['物品','電腦','diànnǎo','computadora',['台'],['部']],
+['物品','門','mén','puerta',['扇'],[]],
+['物品','信','xìn','carta',['封'],['張']],
+['交通','車','chē','carro',['輛'],['台','部']],
+['交通','飛機','fēijī','avión',['架'],['台']],
+['交通','船','chuán','barco',['艘'],['隻','條']],
+['食物','咖啡','kāfēi','café',['杯'],['瓶']],
+['食物','水','shuǐ','agua',['瓶'],['杯','碗']],
+['食物','飯','fàn','arroz',['碗'],[]],
+['食物','蛋糕','dàngāo','pastel',['塊','片'],[]],
+['自然與其他','樹','shù','árbol',['棵'],[]],
+['自然與其他','花','huā','flor',['朵'],['支','把','棵']],
+['自然與其他','山','shān','montaña',['座'],[]],
+['自然與其他','房子','fángzi','casa',['間'],['座']],
+['自然與其他','河','hé','río',['條'],[]],
+['自然與其他','電影','diànyǐng','película',['部'],[]],
+['自然與其他','歌','gē','canción',['首'],['支']],
+['自然與其他','人','rén','persona',['個'],[]]
+];
+const MBANK = MBANK_RAW.map(([g,n,py,es,a,x]) => ({g,n,py,es,a,x}));
+const GROUPS = ['動物','物品','交通','食物','自然與其他'];
+const GES = {'動物':'Animales','物品':'Objetos','交通':'Transporte','食物':'Comida y bebida','自然與其他':'Naturaleza y otros'};
+const MPY = {隻:'zhī',條:'tiáo',匹:'pǐ',本:'běn',張:'zhāng',件:'jiàn',把:'bǎ',雙:'shuāng',副:'fù',頂:'dǐng',支:'zhī',枝:'zhī',台:'tái',扇:'shàn',封:'fēng',輛:'liàng',架:'jià',艘:'sōu',杯:'bēi',瓶:'píng',碗:'wǎn',塊:'kuài',片:'piàn',棵:'kē',朵:'duǒ',座:'zuò',間:'jiān',部:'bù',首:'shǒu',個:'gè'};
+// 干擾項只從這裡挑：不放「個」「枝」「片」，避免有兩個說得通的答案
+const MPOOL = ['隻','條','匹','本','張','件','把','雙','副','頂','支','台','扇','封','輛','架','艘','杯','瓶','碗','塊','棵','朵','座','間','部','首'];
+const MWLIST = []; MBANK.forEach(it => { if (!MWLIST.includes(it.a[0])) MWLIST.push(it.a[0]); });
+
+const cfg = {mode:'shoot', group:'all', mw:'all', set:'水果', ctrl:'stick', pinyin:false, listen:false, invF:false, invR:false};
+function itemPool(){ return MBANK.filter(it => (cfg.group === 'all' || it.g === cfg.group) && (cfg.mw === 'all' || it.a.includes(cfg.mw))); }
+function scopeLabel(){ return cfg.mw !== 'all' ? `量詞「${cfg.mw}」` : (cfg.group === 'all' ? '全部量詞' : cfg.group); }
+
+/* ---------- 3D 場景 ---------- */
+const renderer = new THREE.WebGLRenderer({canvas:$('c'), antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+const scene = new THREE.Scene();
+const FOG = 0xa0aba8;
+scene.fog = new THREE.Fog(FOG, 70, 1100);
+{
+  const c = document.createElement('canvas'); c.width = 2; c.height = 256;
+  const g = c.getContext('2d'); const gr = g.createLinearGradient(0,0,0,256);
+  gr.addColorStop(0,'#2f3d44'); gr.addColorStop(0.55,'#6f7e80'); gr.addColorStop(1,'#a0aba8');
+  g.fillStyle = gr; g.fillRect(0,0,2,256);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; scene.background = t;
+}
+const camera = new THREE.PerspectiveCamera(72, 1, 0.1, 2500);
+camera.rotation.order = 'YXZ';
+
+scene.add(new THREE.HemisphereLight(0xc3cfcb, 0x3a4430, 1.0));
+const sun = new THREE.DirectionalLight(0xfff4e0, 0.8); sun.position.set(80,140,40); scene.add(sun);
+
+function groundTex(){
+  const s = 512, c = document.createElement('canvas'); c.width = c.height = s;
+  const g = c.getContext('2d'); const cols = ['#4a5a36','#3f4e2e','#566439','#5e6a3c','#47552f','#6a6c42','#3a4a2c'];
+  const n = 8, cs = s/n;
+  for (let i=0;i<n;i++) for (let j=0;j<n;j++){
+    g.fillStyle = cols[(srnd()*cols.length)|0]; g.fillRect(i*cs,j*cs,cs,cs);
+    g.strokeStyle = 'rgba(0,0,0,0.13)'; g.lineWidth = 1;
+    const horiz = srnd() < 0.5;
+    for (let k=0;k<cs;k+=6){ g.beginPath(); if (horiz){g.moveTo(i*cs,j*cs+k);g.lineTo((i+1)*cs,j*cs+k);} else {g.moveTo(i*cs+k,j*cs);g.lineTo(i*cs+k,(j+1)*cs);} g.stroke(); }
+  }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(30,30); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(1800,1800), new THREE.MeshLambertMaterial({map:groundTex()}));
+ground.rotation.x = -Math.PI/2; scene.add(ground);
+// 遠山（跟著無人機移動，永遠在遠方）
+const peaks = new THREE.Group();
+{
+  const mm = new THREE.MeshLambertMaterial({color:0x4b5b57, flatShading:true});
+  for (let i=0;i<18;i++){
+    const a = i/18*Math.PI*2 + srnd()*0.2, r = 700 + srnd()*160, h = 120 + srnd()*160;
+    const m = new THREE.Mesh(new THREE.ConeGeometry(110+srnd()*80, h, 7), mm);
+    m.position.set(Math.cos(a)*r, h/2-6, Math.sin(a)*r); m.rotation.y = srnd()*3; peaks.add(m);
+  }
+}
+scene.add(peaks);
+
+// 地形區塊：3×3 塊輪流接力，所以怎麼飛都不會到邊界
+const CH = 400;
+const treeGeo = new THREE.CylinderGeometry(0.4,0.5,3,5), crownGeo = new THREE.ConeGeometry(2.6,7,6);
+const trunkMat = new THREE.MeshLambertMaterial({color:0x4a3a2c}), crownMat = new THREE.MeshLambertMaterial({color:0xffffff});
+const wallMat = new THREE.MeshLambertMaterial({color:0xb6ae9c}), roofMat = new THREE.MeshLambertMaterial({color:0x6a4a3e});
+const roadMat = new THREE.MeshLambertMaterial({color:0x5f5d52});
+const houseGeo = new THREE.BoxGeometry(8,5,6), roofGeo = new THREE.ConeGeometry(6.2,3,4);
+const road1Geo = new THREE.PlaneGeometry(9,CH), road2Geo = new THREE.PlaneGeometry(CH,9);
+function makeChunk(){
+  const rnd = mulberry(777), g = new THREE.Group();
+  const r1 = new THREE.Mesh(road1Geo, roadMat); r1.rotation.x = -Math.PI/2; r1.position.y = 0.04; g.add(r1);
+  const r2 = new THREE.Mesh(road2Geo, roadMat); r2.rotation.x = -Math.PI/2; r2.position.y = 0.05; g.add(r2);
+  const N = 70;
+  const trunk = new THREE.InstancedMesh(treeGeo, trunkMat, N), crown = new THREE.InstancedMesh(crownGeo, crownMat, N);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), col = new THREE.Color();
+  for (let i=0;i<N;i++){
+    let x, z; do { x = (rnd()-0.5)*CH; z = (rnd()-0.5)*CH; } while (Math.abs(x) < 10 || Math.abs(z) < 10);
+    const s = 0.8 + rnd()*0.9; sc.set(s,s,s);
+    ps.set(x,1.5*s,z); m4.compose(ps,q,sc); trunk.setMatrixAt(i,m4);
+    ps.set(x,6.5*s,z); m4.compose(ps,q,sc); crown.setMatrixAt(i,m4);
+    col.setHSL(0.27+rnd()*0.06, 0.28, 0.16+rnd()*0.07); crown.setColorAt(i,col);
+  }
+  g.add(trunk, crown);
+  for (let i=0;i<3;i++){
+    let x, z; do { x = (rnd()-0.5)*(CH-40); z = (rnd()-0.5)*(CH-40); } while (Math.abs(x) < 16 || Math.abs(z) < 16);
+    const b = new THREE.Mesh(houseGeo, wallMat); b.position.set(x,2.5,z);
+    const r = new THREE.Mesh(roofGeo, roofMat); r.position.set(x,6.5,z); r.rotation.y = Math.PI/4; r.scale.set(1.05,1,0.85);
+    g.add(b, r);
+  }
+  scene.add(g); return g;
+}
+const chunks = [];
+for (let i=-1;i<=1;i++) for (let j=-1;j<=1;j++) chunks.push({g:makeChunk(), i, j});
+function followWorld(){
+  const cx = Math.round(D.x/CH)*CH, cz = Math.round(D.z/CH)*CH;
+  for (const c of chunks) c.g.position.set(cx + c.i*CH, 0, cz + c.j*CH);
+  ground.position.set(Math.round(D.x/60)*60, 0, Math.round(D.z/60)*60);
+  peaks.position.set(D.x, 0, D.z);
+}
+
+/* ---------- 飛行門 ---------- */
+const FAM = '"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif';
+function wordTex(w){
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 512;
+  const g = c.getContext('2d'); g.textAlign = 'center'; g.textBaseline = 'middle';
+  let size = 300; g.font = `700 ${size}px ${FAM}`;
+  const m = g.measureText(w.zh).width; if (m > 900) size = Math.floor(size*900/m);
+  g.font = `700 ${size}px ${FAM}`;
+  const cy = cfg.pinyin ? 205 : 256;
+  g.lineWidth = 16; g.lineJoin = 'round'; g.strokeStyle = 'rgba(8,14,18,.9)'; g.strokeText(w.zh,512,cy);
+  g.fillStyle = '#f3fbff'; g.fillText(w.zh,512,cy);
+  if (cfg.pinyin){
+    g.font = `700 84px ${FAM}`; g.lineWidth = 9; g.strokeText(w.py,512,438); g.fillStyle = '#bfeeff'; g.fillText(w.py,512,438);
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+const frameMat = new THREE.MeshStandardMaterial({color:0xcfd6d4, metalness:0.5, roughness:0.45});
+const glowMat = new THREE.MeshBasicMaterial({color:0xa8e8ff});
+const poleMat = new THREE.MeshStandardMaterial({color:0x2a3033, roughness:0.8});
+function makeGate(w, hgt){
+  const g = new THREE.Group();
+  const box = (mat,sx,sy,sz,x,y) => { const m = new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz), mat); m.position.set(x,y,0); g.add(m); };
+  box(frameMat, GW+1.2, 0.6, 0.6, 0, GH/2+0.3);
+  box(frameMat, GW+1.2, 0.6, 0.6, 0, -GH/2-0.3);
+  box(frameMat, 0.6, GH, 0.6, -GW/2-0.3, 0);
+  box(frameMat, 0.6, GH, 0.6, GW/2+0.3, 0);
+  box(glowMat, GW, 0.14, 0.14, 0, GH/2-0.07);
+  box(glowMat, GW, 0.14, 0.14, 0, -GH/2+0.07);
+  box(glowMat, 0.14, GH, 0.14, -GW/2+0.07, 0);
+  box(glowMat, 0.14, GH, 0.14, GW/2-0.07, 0);
+  const ph = Math.max(hgt - GH/2 - 0.6, 0.5);
+  for (const sx of [-1,1]){
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.28,ph,6), poleMat);
+    p.position.set(sx*(GW/2+0.3), -GH/2-0.6-ph/2, 0); g.add(p);
+  }
+  const fill = new THREE.Mesh(new THREE.PlaneGeometry(GW,GH), new THREE.MeshBasicMaterial({color:0x9fdcff, transparent:true, opacity:0.08, depthWrite:false, side:THREE.DoubleSide}));
+  g.add(fill);
+  const txt = new THREE.Mesh(new THREE.PlaneGeometry(9,4.5), new THREE.MeshBasicMaterial({map:wordTex(w), transparent:true, depthWrite:false, side:THREE.DoubleSide}));
+  txt.position.z = 0.02; g.add(txt);
+  return g;
+}
+let gates = [];
+function clearGates(){
+  for (const g of gates){
+    scene.remove(g.obj);
+    g.obj.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose(); });
+  }
+  gates = [];
+}
+
+/* ---------- 射擊量詞 ---------- */
+const MAG = 6;
+let curAns = '', ammo = MAG, reloadAt = 0;
+let targets = [], tracers = [], fxs = [];
+const aimV = new THREE.Vector3(), hv = new THREE.Vector3();
+const burstGeo = new THREE.SphereGeometry(1, 14, 10), tracerGeo = new THREE.BoxGeometry(0.12, 0.12, 5);
+const tracerMat = new THREE.MeshBasicMaterial({color:0xffd27a});
+const ringGeo = new THREE.RingGeometry(5.4, 6.1, 40);
+
+let actx = null;
+function beep(f, d = 0.08, type = 'square', v = 0.05){
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.value = f; g.gain.value = v; o.connect(g); g.connect(actx.destination);
+    o.start(); g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d); o.stop(actx.currentTime + d);
+  } catch (e) {}
+}
+function targetTex(m){
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const g = c.getContext('2d');
+  g.beginPath(); g.arc(256,256,248,0,Math.PI*2); g.fillStyle = 'rgba(10,18,22,.82)'; g.fill();
+  g.lineWidth = 14; g.strokeStyle = '#a8e8ff'; g.stroke();
+  g.strokeStyle = 'rgba(168,232,255,.45)';
+  g.beginPath(); g.arc(256,256,214,0,Math.PI*2); g.lineWidth = 4; g.stroke();
+  g.beginPath(); g.arc(256,256,176,0,Math.PI*2); g.lineWidth = 2; g.stroke();
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = `700 250px ${FAM}`; g.fillStyle = '#f3fbff'; g.fillText(m, 256, cfg.pinyin ? 226 : 262);
+  if (cfg.pinyin){ g.font = `700 64px ${FAM}`; g.fillStyle = '#bfeeff'; g.fillText(MPY[m] || '', 256, 412); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+function clearTargets(){
+  for (const t of targets){ scene.remove(t.obj); t.obj.geometry.dispose(); t.obj.material.map.dispose(); t.obj.material.dispose(); }
+  targets = [];
+  for (const f of fxs){ scene.remove(f.m); f.m.material.dispose(); }
+  fxs = [];
+  for (const k of tracers){ scene.remove(k.m); }
+  tracers = [];
+}
+function spawnTargets(choices){
+  clearTargets();
+  const f = new THREE.Vector3(-Math.sin(D.yaw), 0, -Math.cos(D.yaw));
+  const angs = shuffle([-0.45, 0, 0.45]);
+  choices.forEach((m, i) => {
+    const dist = 50 + Math.random()*16, y = clamp(D.y + (Math.random()*8 - 3), 10, 60);
+    const dir = f.clone().applyAxisAngle(UP, angs[i]);
+    const obj = new THREE.Mesh(new THREE.PlaneGeometry(10,10), new THREE.MeshBasicMaterial({map:targetTex(m), transparent:true, depthWrite:false, side:THREE.DoubleSide}));
+    const base = new THREE.Vector3(D.x + dir.x*dist, y, D.z + dir.z*dist);
+    obj.position.copy(base); scene.add(obj);
+    targets.push({obj, m, base, ph:Math.random()*6.28, side:new THREE.Vector3(-dir.z, 0, dir.x), dead:false});
+  });
+}
+function updateAmmo(){
+  $('ammo').textContent = reloadAt ? 'RELOAD…' : '●'.repeat(ammo) + '○'.repeat(MAG - ammo);
+}
+function startReload(){
+  if (cfg.mode !== 'shoot' || state !== 'play' || reloadAt || ammo >= MAG) return;
+  ammo = 0; reloadAt = performance.now() + 1400; updateAmmo();
+}
+function addFx(pos, color){
+  const m = new THREE.Mesh(burstGeo, new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.8, depthWrite:false}));
+  m.position.copy(pos); scene.add(m); fxs.push({m, t:0});
+}
+function shoot(){
+  if (cfg.mode !== 'shoot' || state !== 'play' || reloadAt) return;
+  if (ammo <= 0){ startReload(); return; }
+  ammo--; if (ammo <= 0) reloadAt = performance.now() + 1400;
+  updateAmmo(); beep(520, 0.07);
+  camera.getWorldDirection(aimV);
+  let best = null, bt = 1e9;
+  for (const t of targets){
+    if (t.dead) continue;
+    hv.copy(t.obj.position).sub(camera.position);
+    const tt = hv.dot(aimV); if (tt < 1) continue;
+    const perp = hv.addScaledVector(aimV, -tt).length();
+    if (perp < 5.2 && tt < bt){ best = t; bt = tt; }
+  }
+  const rx = Math.cos(D.yaw), rz = -Math.sin(D.yaw);
+  const from = new THREE.Vector3(camera.position.x + aimV.x*3 + rx*0.9, camera.position.y + aimV.y*3 - 0.9, camera.position.z + aimV.z*3 + rz*0.9);
+  const to = best ? best.obj.position.clone() : camera.position.clone().addScaledVector(aimV, 160);
+  const m = new THREE.Mesh(tracerGeo, tracerMat); m.position.copy(from); m.lookAt(to); scene.add(m);
+  tracers.push({m, from, to, t:0});
+  if (best) judgeShot(best);
+}
+function judgeShot(t){
+  t.dead = true; t.obj.visible = false;
+  const ok = target.a.includes(t.m);
+  const full = target.a.map(m => `一${m}${target.n}`).join('／');
+  if (ok){
+    score += 100; correct++; fbLose = false; addFx(t.obj.position, 0xb6f5a4); beep(880, 0.16, 'sine', 0.07);
+    feedback(true, '答對了！ +100', `${full}　${target.es}`);
+  } else {
+    lives--; fbLose = lives <= 0; addFx(t.obj.position, 0xff8a6d); beep(180, 0.28, 'sawtooth', 0.06);
+    feedback(false, '射錯了', `你射的是「${t.m}」　　正確是 ${full}`);
+    const good = targets.find(x => target.a.includes(x.m));
+    if (good && !good.dead){
+      const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({color:0xb6f5a4, side:THREE.DoubleSide, transparent:true, opacity:0.9, depthWrite:false}));
+      good.obj.add(ring);
+    }
+  }
+  state = 'fb'; fbUntil = performance.now() + (ok ? 1800 : 3000); hudStats();
+  if (cfg.listen) say(`一${curAns}${target.n}`);
+}
+function startShootRound(){
+  clearGates();
+  const pool = itemPool();
+  let it; do { it = pool[(Math.random()*pool.length)|0]; } while (it === prevTarget && pool.length > 1);
+  prevTarget = target = it;
+  curAns = it.a[(Math.random()*it.a.length)|0];
+  const ds = shuffle(MPOOL.filter(m => !it.a.includes(m) && !it.x.includes(m))).slice(0, 2);
+  spawnTargets(shuffle([curAns, ...ds]));
+  ammo = MAG; reloadAt = 0; updateAmmo();
+  state = 'play'; hudStats(); setPrompt();
+  if (cfg.listen) say(it.n);
+}
+function updateShoot(dt, now){
+  if (reloadAt && now >= reloadAt && state === 'play'){ ammo = MAG; reloadAt = 0; updateAmmo(); }
+  for (const t of targets){
+    const s = Math.sin(playT*1.1 + t.ph);
+    t.obj.position.set(t.base.x + t.side.x*s*2.5, t.base.y + Math.sin(playT*0.8 + t.ph*2)*1.2, t.base.z + t.side.z*s*2.5);
+    t.obj.lookAt(camera.position);
+  }
+  for (let i = tracers.length - 1; i >= 0; i--){
+    const k = tracers[i]; k.t += dt/0.14;
+    k.m.position.lerpVectors(k.from, k.to, Math.min(k.t, 1));
+    if (k.t >= 1){ scene.remove(k.m); tracers.splice(i, 1); }
+  }
+  for (let i = fxs.length - 1; i >= 0; i--){
+    const f = fxs[i]; f.t += dt/0.35;
+    f.m.scale.setScalar(1 + f.t*5); f.m.material.opacity = 0.8*Math.max(0, 1 - f.t);
+    if (f.t >= 1){ scene.remove(f.m); f.m.material.dispose(); fxs.splice(i, 1); }
+  }
+}
+
+/* ---------- 無人機 ---------- */
+const D = {x:0, y:12, z:6, yaw:0, vf:0, vs:0, vy:0, pitch:0, roll:0};
+const L = {x:0,y:0}, R = {x:0,y:0};
+const keys = new Set();
+addEventListener('keydown', e => {
+  keys.add(e.code); if (/^Arrow|Space/.test(e.code)) e.preventDefault();
+  if (e.code === 'Space' && !e.repeat) shoot();
+  if (e.code === 'KeyR' && !e.repeat) startReload();
+});
+$('c').addEventListener('pointerdown', e => { e.preventDefault(); shoot(); });
+$('fire').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); shoot(); });
+addEventListener('keyup', e => keys.delete(e.code));
+const ka = (p,n) => (keys.has(p)?1:0) - (keys.has(n)?1:0);
+
+let hudScale = 1;
+function stick(el, out){
+  const knob = el.querySelector('.k'); let id = null, cx = 0, cy = 0;
+  const move = e => {
+    const Rv = 52*hudScale; let dx = e.clientX-cx, dy = e.clientY-cy; const len = Math.hypot(dx,dy);
+    if (len > Rv){ dx *= Rv/len; dy *= Rv/len; }
+    out.x = dx/Rv; out.y = -dy/Rv; knob.style.transform = `translate(${dx/hudScale}px,${dy/hudScale}px)`;
+  };
+  el.addEventListener('pointerdown', e => { id = e.pointerId; el.setPointerCapture(id); const r = el.getBoundingClientRect(); cx = r.left+r.width/2; cy = r.top+r.height/2; move(e); e.preventDefault(); });
+  el.addEventListener('pointermove', e => { if (e.pointerId === id) move(e); });
+  const end = e => { if (e.pointerId === id){ id = null; out.x = out.y = 0; knob.style.transform = ''; } };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+}
+stick($('ls'), L); stick($('rs'), R);
+
+/* ---------- 手機傾斜 ---------- */
+const tilt = {on:false, got:false, base:null, raw:null, f:0, r:0};
+function dz(v){ const a = Math.abs(v); return a < 0.12 ? 0 : Math.sign(v)*Math.min((a-0.12)/0.88, 1); }
+function onOrient(e){
+  if (e.beta == null || e.gamma == null) return;
+  tilt.got = true;
+  const ang = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (window.orientation || 0);
+  const b = e.beta, g = e.gamma; let p, r;
+  if (ang === 90){ p = g; r = b; } else if (ang === 270 || ang === -90){ p = -g; r = -b; } else if (ang === 180){ p = b; r = -g; } else { p = -b; r = g; }
+  tilt.raw = {p, r}; if (!tilt.base) tilt.base = {p, r};
+  let f = dz((p - tilt.base.p)/22), s = dz((r - tilt.base.r)/22);
+  if (cfg.invF) f = -f; if (cfg.invR) s = -s;
+  tilt.f = f; tilt.r = s;
+}
+$('calib').addEventListener('click', () => { if (tilt.raw) tilt.base = {...tilt.raw}; toast('已校準'); });
+async function enableTilt(){
+  if (typeof DeviceOrientationEvent === 'undefined') return false;
+  if (typeof DeviceOrientationEvent.requestPermission === 'function'){
+    try { const r = await DeviceOrientationEvent.requestPermission(); if (r !== 'granted') return false; } catch (e) { return false; }
+  }
+  tilt.on = true; tilt.got = false; tilt.base = null;
+  addEventListener('deviceorientation', onOrient);
+  setTimeout(() => { if (cfg.ctrl === 'tilt' && !tilt.got){ toast('沒偵測到傾斜感應，改用搖桿'); cfg.ctrl = 'stick'; applyCtrlUI(); } }, 2500);
+  return true;
+}
+function applyCtrlUI(){
+  const t = cfg.ctrl === 'tilt';
+  $('rs').style.display = t ? 'none' : 'block';
+  $('calib').style.display = t ? 'flex' : 'none';
+  if (!t){ tilt.f = tilt.r = 0; }
+}
+
+/* ---------- 語音 ---------- */
+let zhVoice = null;
+const hasTTS = 'speechSynthesis' in window;
+function pickVoice(){ if (!hasTTS) return; const vs = speechSynthesis.getVoices(); zhVoice = vs.find(v => /zh[-_]TW/i.test(v.lang)) || vs.find(v => /^zh/i.test(v.lang)) || null; refreshVoiceNote(); }
+if (hasTTS){ speechSynthesis.onvoiceschanged = pickVoice; pickVoice(); }
+function say(t){ if (!hasTTS) return; speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(t); u.lang = 'zh-TW'; if (zhVoice) u.voice = zhVoice; u.rate = 0.85; speechSynthesis.speak(u); }
+function refreshVoiceNote(){
+  const n = $('voiceNote');
+  if (!hasTTS) n.textContent = '這個瀏覽器不能朗讀，聽力模式無法使用。';
+  else if (!zhVoice) n.textContent = '這台裝置找不到中文語音，聽力模式可能沒有聲音。';
+  else if (!/zh[-_]TW/i.test(zhVoice.lang)) n.textContent = '朗讀的是這台裝置的中文語音，口音可能不是台灣腔。';
+  else n.textContent = '';
+}
+
+/* ---------- 遊戲流程 ---------- */
+let state = 'menu', round = 0, score = 0, lives = 3, correct = 0, target = null, prevTarget = null, fbUntil = 0, fbLose = false, playT = 0;
+const tmpV = new THREE.Vector3();
+
+function lifeHTML(){ let h = ''; for (let i=0;i<3;i++) h += `<i class="${i<lives?'on':''}"></i>`; $('lf').innerHTML = h; }
+function hudStats(){
+  $('sc').textContent = String(score).padStart(4,'0'); lifeHTML();
+  $('pm').textContent = `MISSION ${String(Math.min(round,TOTAL)).padStart(2,'0')} / ${TOTAL}`;
+  $('pc').textContent = `答對 ${correct}`;
+}
+function setPrompt(){
+  if (cfg.mode === 'shoot'){
+    if (cfg.listen){ $('pz').textContent = '一＿？'; $('pp').textContent = ''; $('ps').textContent = '聽名詞，射出正確的量詞'; }
+    else { $('pz').textContent = `一＿${target.n}`; $('pp').textContent = cfg.pinyin ? target.py : ''; $('ps').textContent = target.es; }
+    $('spk').style.display = hasTTS ? 'inline-flex' : 'none';
+    return;
+  }
+  if (cfg.listen){
+    $('pz').textContent = '聽，然後飛過正確的字'; $('pp').textContent = ''; $('ps').textContent = '';
+  } else {
+    $('pz').textContent = `飛過「${target.zh}」`;
+    $('pp').textContent = cfg.pinyin ? target.py : '';
+    $('ps').textContent = target.es;
+  }
+  $('spk').style.display = hasTTS ? 'inline-flex' : 'none';
+}
+function nextRound(){
+  round++;
+  if (round > TOTAL){ endGame(true); return; }
+  if (cfg.mode === 'shoot'){ startShootRound(); return; }
+  const words = SETS[cfg.set].w;
+  let t; do { t = words[(Math.random()*words.length)|0]; } while (t === prevTarget && words.length > 1);
+  prevTarget = target = t;
+  const others = shuffle(words.filter(w => w !== t)).slice(0,2);
+  const list = shuffle([t, ...others]);
+  // 生出三個門
+  clearGates();
+  const f = new THREE.Vector3(-Math.sin(D.yaw), 0, -Math.cos(D.yaw));
+  const angs = shuffle([-0.6, 0, 0.6]);
+  list.forEach((w,i) => {
+    const dist = 60 + Math.random()*25, hgt = 6 + Math.random()*10;
+    const dir = f.clone().applyAxisAngle(UP, angs[i]);
+    const obj = makeGate(w, hgt);
+    obj.position.set(D.x + dir.x*dist, hgt, D.z + dir.z*dist);
+    obj.lookAt(D.x, hgt, D.z); obj.updateMatrixWorld(true);
+    scene.add(obj); gates.push({obj, word:w, prev:null});
+  });
+  state = 'play'; hudStats(); setPrompt();
+  if (cfg.listen) say(t.zh);
+}
+function feedback(ok, msg, sub){
+  const el = $('fb'); el.className = 'show ' + (ok ? 'good' : 'bad');
+  el.innerHTML = msg + (sub ? `<small>${sub}</small>` : '');
+}
+function judge(g){
+  if (state !== 'play') return;
+  if (g.word === target){
+    score += 100; correct++; feedback(true, '答對了！ +100', `${target.zh}　${target.es}`);
+    fbLose = false;
+  } else {
+    lives--; feedback(false, '飛錯了', `那是「${g.word.zh}」${g.word.es}　　要找的是「${target.zh}」`);
+    fbLose = lives <= 0;
+  }
+  state = 'fb'; fbUntil = performance.now() + 1800; hudStats();
+}
+function checkGates(){
+  tmpV.set(D.x, D.y, D.z);
+  for (const g of gates){
+    const lp = g.obj.worldToLocal(tmpV.clone());
+    if (g.prev){
+      if ((g.prev.z > 0) !== (lp.z > 0)){
+        const t = g.prev.z/(g.prev.z - lp.z);
+        const x = g.prev.x + (lp.x - g.prev.x)*t, y = g.prev.y + (lp.y - g.prev.y)*t;
+        if (Math.abs(x) < GW/2 - 0.2 && Math.abs(y) < GH/2 - 0.2){ judge(g); return; }
+      }
+      g.prev.copy(lp);
+    } else g.prev = lp;
+  }
+}
+function resetDrone(){ Object.assign(D, {x:0, y:12, z:6, yaw:0, vf:0, vs:0, vy:0, pitch:0, roll:0}); }
+function startGame(){
+  resetDrone(); clearGates(); round = 0; score = 0; lives = 3; correct = 0; playT = 0; prevTarget = null;
+  $('fb').className = ''; nextRound();
+}
+function endGame(win){
+  state = 'end'; clearGates(); clearTargets(); $('fb').className = '';
+  $('endT').textContent = win ? '任務完成！' : '任務失敗';
+  $('endS').textContent = String(score);
+  $('endC').textContent = `答對 ${correct} / ${TOTAL}　　${cfg.mode === 'shoot' ? scopeLabel() : cfg.set}`;
+  $('end').hidden = false;
+}
+
+/* ---------- 主迴圈 ---------- */
+function headingText(){
+  const deg = (((-D.yaw*180/Math.PI) % 360) + 360) % 360;
+  const names = ['N','NE','E','SE','S','SW','W','NW'];
+  return `${names[Math.round(deg/45) % 8]} ${String(Math.round(deg) % 360).padStart(3,'0')}`;
+}
+let hudTick = 0;
+function update(dt, now){
+  if (state === 'menu' || state === 'end'){
+    D.yaw += dt*0.04; D.y = 14 + Math.sin(now/1500)*1.2; D.pitch = 0; D.roll = 0;
+  } else {
+    const useTilt = cfg.ctrl === 'tilt';
+    const yawIn = clamp(L.x + ka('ArrowRight','ArrowLeft') + ka('KeyE','KeyQ'));
+    const altIn = clamp(L.y + ka('ArrowUp','ArrowDown'));
+    const fwdIn = clamp((useTilt ? tilt.f : R.y) + ka('KeyW','KeyS'));
+    const strIn = clamp((useTilt ? tilt.r : R.x) + ka('KeyD','KeyA'));
+    D.yaw -= yawIn*1.4*dt;
+    const k = 1 - Math.exp(-3.5*dt);
+    D.vf += (fwdIn*(fwdIn > 0 ? 16 : 8) - D.vf)*k;
+    D.vs += (strIn*10 - D.vs)*k;
+    D.vy += (altIn*8 - D.vy)*k;
+    const fx = -Math.sin(D.yaw), fz = -Math.cos(D.yaw), rx = Math.cos(D.yaw), rz = -Math.sin(D.yaw);
+    D.x += (fx*D.vf + rx*D.vs)*dt; D.z += (fz*D.vf + rz*D.vs)*dt; D.y += D.vy*dt;
+    if (D.y < 1.5){ D.y = 1.5; if (D.vy < 0) D.vy = 0; }
+    if (D.y > 70){ D.y = 70; if (D.vy > 0) D.vy = 0; }
+    D.pitch += ((-D.vf/16*0.1) - D.pitch)*k; D.roll += ((-D.vs/10*0.14) - D.roll)*k;
+    playT += dt;
+    if (state === 'play') checkGates();
+    else if (state === 'fb' && now > fbUntil){
+      $('fb').className = '';
+      if (fbLose) endGame(false); else nextRound();
+    }
+  }
+  camera.position.set(D.x, D.y, D.z);
+  followWorld();
+  camera.rotation.set(D.pitch, D.yaw, D.roll);
+  updateShoot(dt, now);
+  hudTick += dt;
+  if (hudTick > 0.1){
+    hudTick = 0;
+    $('alt').textContent = `${Math.round(D.y)} m`;
+    $('spd').textContent = `${Math.round(Math.hypot(D.vf, D.vs, D.vy)*3.6)} km/h`;
+    $('hd').textContent = headingText();
+    const s = Math.floor(playT); $('tm').textContent = `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+  }
+}
+let last = performance.now();
+function frame(now){
+  const dt = Math.min((now - last)/1000, 0.05); last = now;
+  update(dt, now); renderer.render(scene, camera); requestAnimationFrame(frame);
+}
+
+/* ---------- 版面 ---------- */
+function resize(){
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix();
+  hudScale = clamp(Math.min(h/390, w/760), 0.6, 1.6);
+  const hud = $('hud'); hud.style.width = (w/hudScale)+'px'; hud.style.height = (h/hudScale)+'px'; hud.style.transform = `scale(${hudScale})`;
+  $('rotate').hidden = !(h > w);
+}
+addEventListener('resize', resize); addEventListener('orientationchange', () => setTimeout(resize, 200));
+
+let toastT = 0;
+function toast(t){ const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 2400); }
+
+/* ---------- 選單 ---------- */
+const setBox = $('sets'), ctrlBox = $('ctrls'), modeBox = $('modes'), grpBox = $('groups'), mwSel = $('mwSel');
+function mkChip(box, v, zh, es, fn){
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.dataset.v = v;
+  b.innerHTML = `${zh}<small>${es}</small>`; b.onclick = fn; box.appendChild(b);
+}
+Object.keys(SETS).forEach(k => mkChip(setBox, k, k, SETS[k].es, () => { cfg.set = k; refreshMenu(); }));
+[['stick','搖桿','Joystick'],['tilt','傾斜','Inclinar']].forEach(([v,zh,es]) => mkChip(ctrlBox, v, zh, es, () => { cfg.ctrl = v; refreshMenu(); }));
+[['shoot','射擊量詞','Tiro de clasificadores'],['gate','飛過門','Puertas de palabras']].forEach(([v,zh,es]) => mkChip(modeBox, v, zh, es, () => { cfg.mode = v; refreshMenu(); }));
+mkChip(grpBox, 'all', '全部', 'Todos', () => { cfg.group = 'all'; cfg.mw = 'all'; refreshMenu(); });
+GROUPS.forEach(k => mkChip(grpBox, k, k, GES[k], () => { cfg.group = k; cfg.mw = 'all'; refreshMenu(); }));
+mwSel.add(new Option('全部 / todos', 'all'));
+MWLIST.forEach(m => mwSel.add(new Option(`${m}　${MPY[m]}`, m)));
+mwSel.onchange = () => { cfg.mw = mwSel.value; if (cfg.mw !== 'all') cfg.group = 'all'; refreshMenu(); };
+function refreshMenu(){
+  setBox.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b.dataset.v === cfg.set));
+  ctrlBox.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b.dataset.v === cfg.ctrl));
+  modeBox.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b.dataset.v === cfg.mode));
+  grpBox.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b.dataset.v === cfg.group && cfg.mw === 'all'));
+  mwSel.value = cfg.mw;
+  $('shootOpts').style.display = cfg.mode === 'shoot' ? 'block' : 'none';
+  $('gateOpts').style.display = cfg.mode === 'gate' ? 'block' : 'none';
+  $('tiltOpts').style.display = cfg.ctrl === 'tilt' ? 'flex' : 'none';
+}
+function applyModeUI(){
+  const sh = cfg.mode === 'shoot';
+  $('fire').style.display = sh ? 'flex' : 'none';
+  $('ammoP').style.display = sh ? 'block' : 'none';
+}
+refreshMenu(); refreshVoiceNote();
+
+$('go').onclick = async () => {
+  cfg.pinyin = $('optPy').checked; cfg.listen = $('optListen').checked && hasTTS;
+  cfg.invF = $('optInvF').checked; cfg.invR = $('optInvR').checked;
+  if (cfg.ctrl === 'tilt'){
+    const ok = await enableTilt();
+    if (!ok){ cfg.ctrl = 'stick'; toast('這台裝置不能用傾斜，改用搖桿'); }
+  }
+  applyCtrlUI(); applyModeUI(); $('menu').hidden = true; $('end').hidden = true;
+  if (cfg.listen) say('');   // 在點擊當下啟動語音（部分手機需要）
+  startGame();
+};
+$('again').onclick = () => { $('end').hidden = true; applyCtrlUI(); startGame(); };
+$('toMenu').onclick = () => { $('end').hidden = true; state = 'menu'; $('menu').hidden = false; };
+$('menuBtn').onclick = () => { clearGates(); clearTargets(); state = 'menu'; $('fb').className = ''; $('menu').hidden = false; };
+$('spk').onclick = () => { if (target) say(cfg.mode === 'shoot' ? target.n : target.zh); };
+
+/* ---------- 開始 ---------- */
+(async () => { try { await document.fonts.load('700 100px "Noto Sans TC"', '蘋果香蕉'); } catch (e) {} })();
+resize(); applyCtrlUI(); applyModeUI(); lifeHTML();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
