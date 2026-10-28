@@ -50,6 +50,7 @@ button{font-family:inherit}
 .opts label{display:flex;align-items:center;gap:6px;min-height:30px}
 .opts input{width:18px;height:18px;accent-color:#b6f5a4}
 .go{margin-top:14px;width:100%;min-height:50px;font-size:20px;font-weight:700;letter-spacing:3px;cursor:pointer;color:#10140f;background:#b6f5a4;border:0}
+.go:disabled{opacity:.4;cursor:default}
 .go small{display:block;font-size:12px;font-weight:400;letter-spacing:1px}
 .note{font-size:12px;color:#8fcf80;margin-top:6px;line-height:1.5}
 #end .big{font-size:40px;font-family:'Share Tech Mono',monospace;color:#f1fbec;margin:4px 0}
@@ -121,6 +122,7 @@ select{font:inherit;font-size:15px;min-height:36px;color:#b6f5a4;background:#101
     <h2>選項 / Opciones</h2>
     <div class="opts"><label><input type="checkbox" id="optPy">顯示拼音 pinyin</label><label><input type="checkbox" id="optListen">聽力模式 escucha</label></div>
     <div class="note" id="voiceNote"></div>
+    <div class="note" id="bankNote"></div>
     <button type="button" class="go" id="go">出發<small>Despegar</small></button>
     <div class="note">電腦玩：W S 前後、A D 左右、↑ ↓ 升降、← → 轉向（或 Q E）。射擊：空白鍵或點滑鼠，R 換彈。手機：點「射擊」鈕。</div>
   </div>
@@ -143,16 +145,62 @@ select{font:inherit;font-size:15px;min-height:36px;color:#b6f5a4;background:#101
 <script type="module">
 import * as THREE from 'three';
 
-/* ---------- 題庫 ---------- */
-const RAW = {
-  '水果': {es:'Frutas', w:[['蘋果','píngguǒ','manzana'],['香蕉','xiāngjiāo','plátano'],['西瓜','xīguā','sandía'],['葡萄','pútáo','uva'],['橘子','júzi','mandarina'],['草莓','cǎoméi','fresa'],['鳳梨','fènglí','piña'],['芒果','mángguǒ','mango']]},
-  '動物': {es:'Animales', w:[['貓','māo','gato'],['狗','gǒu','perro'],['鳥','niǎo','pájaro'],['魚','yú','pez'],['馬','mǎ','caballo'],['兔子','tùzi','conejo'],['老虎','lǎohǔ','tigre'],['猴子','hóuzi','mono']]},
-  '顏色': {es:'Colores', w:[['紅色','hóngsè','rojo'],['藍色','lánsè','azul'],['綠色','lǜsè','verde'],['黃色','huángsè','amarillo'],['白色','báisè','blanco'],['黑色','hēisè','negro'],['紫色','zǐsè','morado'],['粉紅色','fěnhóngsè','rosa']]},
-  '交通': {es:'Transporte', w:[['公車','gōngchē','autobús'],['捷運','jiéyùn','metro'],['火車','huǒchē','tren'],['機車','jīchē','moto'],['腳踏車','jiǎotàchē','bicicleta'],['計程車','jìchéngchē','taxi'],['飛機','fēijī','avión'],['船','chuán','barco']]},
-  '食物': {es:'Comida', w:[['米飯','mǐfàn','arroz'],['麵','miàn','fideos'],['水餃','shuǐjiǎo','empanadillas'],['豆漿','dòujiāng','leche de soja'],['包子','bāozi','pan al vapor'],['蛋','dàn','huevo'],['牛肉麵','niúròumiàn','sopa de fideos con res'],['珍珠奶茶','zhēnzhū nǎichá','té con leche y perlas']]}
-};
-const SETS = {};
-for (const k in RAW) SETS[k] = {es: RAW[k].es, w: RAW[k].w.map(([zh,py,es]) => ({zh,py,es}))};
+/* ---------- 題庫（從 data/*.csv 讀入，不寫在程式裡）---------- */
+let SETS = {}, MBANK = [], GROUPS = [], GES = {}, MPY = {}, MPOOL = [], MWLIST = [];
+let bankOK = false, bankErr = '';
+function parseCSV(text){
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const rows = []; let row = [], f = '', q = false;
+  for (let i = 0; i < text.length; i++){
+    const c = text[i];
+    if (q){
+      if (c === '"'){ if (text[i+1] === '"'){ f += '"'; i++; } else q = false; } else f += c;
+    } else if (c === '"') q = true;
+    else if (c === ','){ row.push(f); f = ''; }
+    else if (c === '\n' || c === '\r'){
+      if (c === '\r' && text[i+1] === '\n') i++;
+      row.push(f); f = '';
+      if (row.some(v => v.trim() !== '')) rows.push(row);
+      row = [];
+    } else f += c;
+  }
+  row.push(f); if (row.some(v => v.trim() !== '')) rows.push(row);
+  return rows;
+}
+async function loadCSV(path){
+  const r = await fetch(path, {cache:'no-cache'});
+  if (!r.ok) throw new Error(`讀不到 ${path}（${r.status}）`);
+  return parseCSV(await r.text());
+}
+async function loadBank(){
+  const warn = [], t = v => (v || '').trim();
+  try {
+    const [cl, mw, wd] = await Promise.all([loadCSV('data/classifiers.csv'), loadCSV('data/measure-words.csv'), loadCSV('data/words.csv')]);
+    MPY = {}; MPOOL = [];
+    mw.slice(1).forEach(r => { const m = t(r[0]); if (!m) return; MPY[m] = t(r[1]); if (t(r[2]) === '是') MPOOL.push(m); });
+    MBANK = []; GROUPS = []; GES = {};
+    cl.slice(1).forEach((r, i) => {
+      const [g, ges, n, py, es, a, x] = r.map(t);
+      if (!g || !n || !a){ warn.push(`量詞題庫第 ${i+1} 筆缺資料，已略過`); return; }
+      const aa = a.split('/').map(t).filter(Boolean), xx = (x || '').split('/').map(t).filter(Boolean);
+      if (MPOOL.filter(m => !aa.includes(m) && !xx.includes(m)).length < 2){ warn.push(`「${n}」可用的干擾項不足 2 個，已略過`); return; }
+      aa.forEach(m => { if (!(m in MPY)) warn.push(`量詞「${m}」不在 measure-words.csv，沒有拼音`); });
+      if (!GROUPS.includes(g)){ GROUPS.push(g); GES[g] = ges; }
+      MBANK.push({g, n, py, es, a:aa, x:xx});
+    });
+    SETS = {};
+    wd.slice(1).forEach((r, i) => {
+      const [k, kes, zh, py, es] = r.map(t);
+      if (!k || !zh){ warn.push(`詞庫第 ${i+1} 筆缺資料，已略過`); return; }
+      (SETS[k] = SETS[k] || {es:kes, w:[]}).w.push({zh, py, es});
+    });
+    for (const k of Object.keys(SETS)) if (SETS[k].w.length < 3){ warn.push(`主題「${k}」少於 3 個詞，已略過`); delete SETS[k]; }
+    if (!MBANK.length || !Object.keys(SETS).length) throw new Error('題庫是空的');
+    MWLIST = []; MBANK.forEach(it => { if (!MWLIST.includes(it.a[0])) MWLIST.push(it.a[0]); });
+    bankOK = true;
+  } catch (e){ bankOK = false; bankErr = e.message; }
+  return [...new Set(warn)];
+}
 
 const TOTAL = 10, GW = 10, GH = 7;
 const $ = id => document.getElementById(id);
@@ -162,52 +210,7 @@ function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a
 const srnd = mulberry(20261027);
 const shuffle = a => { a = a.slice(); for (let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];} return a; };
 
-/* ---------- 量詞題庫（Ben 確認版）---------- */
-// [分類, 名詞, 拼音, 西文, 正確量詞(可多個), 不可當干擾項的量詞(其實也說得通)]
-const MBANK_RAW = [
-['動物','貓','māo','gato',['隻'],[]],
-['動物','狗','gǒu','perro',['隻'],['條']],
-['動物','鳥','niǎo','pájaro',['隻'],[]],
-['動物','魚','yú','pez',['條'],['隻']],
-['動物','馬','mǎ','caballo',['匹'],['隻','條']],
-['物品','書','shū','libro',['本'],['部']],
-['物品','紙','zhǐ','papel',['張'],[]],
-['物品','桌子','zhuōzi','mesa',['張'],[]],
-['物品','衣服','yīfú','ropa',['件'],[]],
-['物品','褲子','kùzi','pantalones',['條'],['件']],
-['物品','雨傘','yǔsǎn','paraguas',['把'],['支']],
-['物品','鞋子','xiézi','zapatos',['雙'],['隻']],
-['物品','眼鏡','yǎnjìng','gafas',['副'],[]],
-['物品','帽子','màozi','sombrero',['頂'],[]],
-['物品','筆','bǐ','bolígrafo',['支','枝'],[]],
-['物品','電腦','diànnǎo','computadora',['台'],['部']],
-['物品','門','mén','puerta',['扇'],[]],
-['物品','信','xìn','carta',['封'],['張']],
-['交通','車','chē','carro',['輛'],['台','部']],
-['交通','飛機','fēijī','avión',['架'],['台']],
-['交通','船','chuán','barco',['艘'],['隻','條']],
-['食物','咖啡','kāfēi','café',['杯'],['瓶']],
-['食物','水','shuǐ','agua',['瓶'],['杯','碗']],
-['食物','飯','fàn','arroz',['碗'],[]],
-['食物','蛋糕','dàngāo','pastel',['塊','片'],[]],
-['自然與其他','樹','shù','árbol',['棵'],[]],
-['自然與其他','花','huā','flor',['朵'],['支','把','棵']],
-['自然與其他','山','shān','montaña',['座'],[]],
-['自然與其他','房子','fángzi','casa',['間'],['座']],
-['自然與其他','河','hé','río',['條'],[]],
-['自然與其他','電影','diànyǐng','película',['部'],[]],
-['自然與其他','歌','gē','canción',['首'],['支']],
-['自然與其他','人','rén','persona',['個'],[]]
-];
-const MBANK = MBANK_RAW.map(([g,n,py,es,a,x]) => ({g,n,py,es,a,x}));
-const GROUPS = ['動物','物品','交通','食物','自然與其他'];
-const GES = {'動物':'Animales','物品':'Objetos','交通':'Transporte','食物':'Comida y bebida','自然與其他':'Naturaleza y otros'};
-const MPY = {隻:'zhī',條:'tiáo',匹:'pǐ',本:'běn',張:'zhāng',件:'jiàn',把:'bǎ',雙:'shuāng',副:'fù',頂:'dǐng',支:'zhī',枝:'zhī',台:'tái',扇:'shàn',封:'fēng',輛:'liàng',架:'jià',艘:'sōu',杯:'bēi',瓶:'píng',碗:'wǎn',塊:'kuài',片:'piàn',棵:'kē',朵:'duǒ',座:'zuò',間:'jiān',部:'bù',首:'shǒu',個:'gè'};
-// 干擾項只從這裡挑：不放「個」「枝」「片」，避免有兩個說得通的答案
-const MPOOL = ['隻','條','匹','本','張','件','把','雙','副','頂','支','台','扇','封','輛','架','艘','杯','瓶','碗','塊','棵','朵','座','間','部','首'];
-const MWLIST = []; MBANK.forEach(it => { if (!MWLIST.includes(it.a[0])) MWLIST.push(it.a[0]); });
-
-const cfg = {mode:'shoot', group:'all', mw:'all', set:'水果', ctrl:'stick', pinyin:false, listen:false, invF:false, invR:false};
+const cfg = {mode:'shoot', group:'all', mw:'all', set:'', ctrl:'stick', pinyin:false, listen:false, invF:false, invR:false};
 function itemPool(){ return MBANK.filter(it => (cfg.group === 'all' || it.g === cfg.group) && (cfg.mw === 'all' || it.a.includes(cfg.mw))); }
 function scopeLabel(){ return cfg.mw !== 'all' ? `量詞「${cfg.mw}」` : (cfg.group === 'all' ? '全部量詞' : cfg.group); }
 
@@ -718,15 +721,20 @@ function toast(t){ const el = $('toast'); el.textContent = t; el.classList.add('
 const setBox = $('sets'), ctrlBox = $('ctrls'), modeBox = $('modes'), grpBox = $('groups'), mwSel = $('mwSel');
 function mkChip(box, v, zh, es, fn){
   const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.dataset.v = v;
-  b.innerHTML = `${zh}<small>${es}</small>`; b.onclick = fn; box.appendChild(b);
+  b.innerHTML = `${zh}<small>${es || ''}</small>`; b.onclick = fn; box.appendChild(b);
 }
-Object.keys(SETS).forEach(k => mkChip(setBox, k, k, SETS[k].es, () => { cfg.set = k; refreshMenu(); }));
 [['stick','搖桿','Joystick'],['tilt','傾斜','Inclinar']].forEach(([v,zh,es]) => mkChip(ctrlBox, v, zh, es, () => { cfg.ctrl = v; refreshMenu(); }));
 [['shoot','射擊量詞','Tiro de clasificadores'],['gate','飛過門','Puertas de palabras']].forEach(([v,zh,es]) => mkChip(modeBox, v, zh, es, () => { cfg.mode = v; refreshMenu(); }));
-mkChip(grpBox, 'all', '全部', 'Todos', () => { cfg.group = 'all'; cfg.mw = 'all'; refreshMenu(); });
-GROUPS.forEach(k => mkChip(grpBox, k, k, GES[k], () => { cfg.group = k; cfg.mw = 'all'; refreshMenu(); }));
-mwSel.add(new Option('全部 / todos', 'all'));
-MWLIST.forEach(m => mwSel.add(new Option(`${m}　${MPY[m]}`, m)));
+function buildDataMenu(){
+  setBox.innerHTML = ''; grpBox.innerHTML = ''; mwSel.innerHTML = '';
+  Object.keys(SETS).forEach(k => mkChip(setBox, k, k, SETS[k].es, () => { cfg.set = k; refreshMenu(); }));
+  if (!SETS[cfg.set]) cfg.set = Object.keys(SETS)[0];
+  mkChip(grpBox, 'all', '全部', 'Todos', () => { cfg.group = 'all'; cfg.mw = 'all'; refreshMenu(); });
+  GROUPS.forEach(k => mkChip(grpBox, k, k, GES[k], () => { cfg.group = k; cfg.mw = 'all'; refreshMenu(); }));
+  mwSel.add(new Option('全部 / todos', 'all'));
+  MWLIST.forEach(m => mwSel.add(new Option(`${m}　${MPY[m] || ''}`, m)));
+  refreshMenu();
+}
 mwSel.onchange = () => { cfg.mw = mwSel.value; if (cfg.mw !== 'all') cfg.group = 'all'; refreshMenu(); };
 function refreshMenu(){
   setBox.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b.dataset.v === cfg.set));
@@ -746,6 +754,7 @@ function applyModeUI(){
 refreshMenu(); refreshVoiceNote();
 
 $('go').onclick = async () => {
+  if (!bankOK) return;
   cfg.pinyin = $('optPy').checked; cfg.listen = $('optListen').checked && hasTTS;
   cfg.invF = $('optInvF').checked; cfg.invR = $('optInvR').checked;
   if (cfg.ctrl === 'tilt'){
@@ -765,6 +774,15 @@ $('spk').onclick = () => { if (target) say(cfg.mode === 'shoot' ? target.n : tar
 (async () => { try { await document.fonts.load('700 100px "Noto Sans TC"', '蘋果香蕉'); } catch (e) {} })();
 resize(); applyCtrlUI(); applyModeUI(); lifeHTML();
 requestAnimationFrame(frame);
+$('go').disabled = true; $('bankNote').textContent = '題庫載入中…';
+loadBank().then(warn => {
+  if (bankOK){
+    buildDataMenu(); $('go').disabled = false;
+    $('bankNote').textContent = warn.length ? '題庫提醒：' + warn.join('；') : '';
+  } else {
+    $('bankNote').textContent = `題庫載入失敗：${bankErr}。請用網址（GitHub Pages）開啟，直接點兩下 html 檔讀不到題庫。`;
+  }
+});
 </script>
 </body>
 </html>
