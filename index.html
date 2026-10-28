@@ -32,6 +32,11 @@ button{font-family:inherit}
 #calib{position:absolute;right:36px;bottom:40px;width:104px;height:80px;display:none;flex-direction:column;align-items:center;justify-content:center;gap:4px;pointer-events:auto;cursor:pointer;color:#f1fbec;background:rgba(8,12,9,.5);border:2px solid rgba(182,245,164,.55);border-radius:12px;font-size:15px;font-weight:700}
 #calib small{font-size:11px;font-weight:400;color:#b6f5a4}
 #fb{position:absolute;left:0;right:0;top:112px;text-align:center;font-size:34px;font-weight:700;letter-spacing:2px;text-shadow:0 2px 8px #000;opacity:0;transition:opacity .15s}
+#hintA{position:absolute;left:50%;top:50%;width:0;height:0;display:none;pointer-events:none}
+#hintR{position:absolute;left:-20px;top:-34px;width:40px;height:68px}
+#hintR svg{display:block;animation:hintMove .8s ease-out infinite}
+@keyframes hintMove{0%{transform:translateY(-34px);opacity:0}25%{opacity:1}100%{transform:translateY(-118px);opacity:0}}
+#hintL{position:absolute;left:-110px;width:220px;top:44px;text-align:center;font-size:16px;font-weight:700;color:#b6f5a4;text-shadow:0 2px 6px #000;font-family:'Noto Sans TC',sans-serif}
 #fb.show{opacity:1}#fb.good{color:#b6f5a4}#fb.bad{color:#ffb347}
 #fb small{display:block;font-size:16px;font-weight:400;color:#f1fbec;letter-spacing:1px}
 #toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:rgba(8,12,9,.85);border:1px solid rgba(182,245,164,.5);padding:8px 14px;font-size:14px;color:#f1fbec;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20;text-align:center}
@@ -100,6 +105,7 @@ select{font:inherit;font-size:15px;min-height:36px;color:#b6f5a4;background:#101
     <circle r="15"/><line x1="0" y1="-25" x2="0" y2="-15"/><line x1="0" y1="15" x2="0" y2="25"/><line x1="-25" y1="0" x2="-15" y2="0"/><line x1="15" y1="0" x2="25" y2="0"/><circle r="1.6" fill="#b6f5a4"/>
   </svg>
   <div id="fb"></div>
+  <div id="hintA"><div id="hintR"><svg viewBox="-20 -34 40 68" width="40" height="68" aria-hidden="true"><path d="M0 -30 L16 0 H6 V28 H-6 V0 H-16 Z" fill="#b6f5a4" stroke="#0a120c" stroke-width="2.5" stroke-linejoin="round"/></svg></div><div id="hintL"></div></div>
 
   <div class="joy" id="ls" style="left:36px"><div class="k"></div><div class="l">升降 ・ 轉向</div></div>
   <div class="joy" id="rs" style="right:36px"><div class="k"></div><div class="l">前後 ・ 左右</div></div>
@@ -120,6 +126,7 @@ select{font:inherit;font-size:15px;min-height:36px;color:#b6f5a4;background:#101
       <h2>量詞範圍 / Clasificadores</h2>
       <div class="chips" id="groups"></div>
       <div class="opts" style="margin-top:6px"><label>只練這個量詞 <select id="mwSel" aria-label="只練這個量詞"></select></label></div>
+      <div class="note">場上有 30 個不重複的量詞，有的在空中、有的在地面。自己飛去找，射出正確的那一個。20 秒找不到會出現 3 秒的方向箭頭，該題只得 50 分。</div>
     </div>
     <div id="gateOpts">
       <h2>主題 / Tema</h2>
@@ -277,6 +284,8 @@ const wallMat = new THREE.MeshLambertMaterial({color:0xb6ae9c}), roofMat = new T
 const roadMat = new THREE.MeshLambertMaterial({color:0x5f5d52});
 const houseGeo = new THREE.BoxGeometry(8,5,6), roofGeo = new THREE.ConeGeometry(6.2,3,4);
 const road1Geo = new THREE.PlaneGeometry(9,CH), road2Geo = new THREE.PlaneGeometry(CH,9);
+const LAYOUT = {trees:[], houses:[]};
+let layoutRec = true;
 function makeChunk(){
   const rnd = mulberry(777), g = new THREE.Group();
   const r1 = new THREE.Mesh(road1Geo, roadMat); r1.rotation.x = -Math.PI/2; r1.position.y = 0.04; g.add(r1);
@@ -286,6 +295,7 @@ function makeChunk(){
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), col = new THREE.Color();
   for (let i=0;i<N;i++){
     let x, z; do { x = (rnd()-0.5)*CH; z = (rnd()-0.5)*CH; } while (Math.abs(x) < 10 || Math.abs(z) < 10);
+    if (layoutRec) LAYOUT.trees.push([x,z]);
     const s = 0.8 + rnd()*0.9; sc.set(s,s,s);
     ps.set(x,1.5*s,z); m4.compose(ps,q,sc); trunk.setMatrixAt(i,m4);
     ps.set(x,6.5*s,z); m4.compose(ps,q,sc); crown.setMatrixAt(i,m4);
@@ -294,10 +304,12 @@ function makeChunk(){
   g.add(trunk, crown);
   for (let i=0;i<3;i++){
     let x, z; do { x = (rnd()-0.5)*(CH-40); z = (rnd()-0.5)*(CH-40); } while (Math.abs(x) < 16 || Math.abs(z) < 16);
+    if (layoutRec) LAYOUT.houses.push([x,z]);
     const b = new THREE.Mesh(houseGeo, wallMat); b.position.set(x,2.5,z);
     const r = new THREE.Mesh(roofGeo, roofMat); r.position.set(x,6.5,z); r.rotation.y = Math.PI/4; r.scale.set(1.05,1,0.85);
     g.add(b, r);
   }
+  layoutRec = false;
   scene.add(g); return g;
 }
 const chunks = [];
@@ -366,7 +378,10 @@ let targets = [], tracers = [], fxs = [];
 const aimV = new THREE.Vector3(), hv = new THREE.Vector3();
 const burstGeo = new THREE.SphereGeometry(1, 14, 10), tracerGeo = new THREE.BoxGeometry(0.12, 0.12, 5);
 const tracerMat = new THREE.MeshBasicMaterial({color:0xffd27a});
-const ringGeo = new THREE.RingGeometry(5.4, 6.1, 40);
+const ringGeo = new THREE.RingGeometry(6.6, 7.4, 40);
+const poleGeo = new THREE.CylinderGeometry(0.35, 0.45, 1.5, 6);
+const ARENA_N = 30, ARENA_R = 260, HINT_AFTER = 20, TS = 12, HIT = 5.6;
+let qs = [], qT = 0, hintUsed = false, hintUntil = 0, hintRing = null;
 
 let actx = null;
 function beep(f, d = 0.08, type = 'square', v = 0.05){
@@ -392,24 +407,74 @@ function targetTex(m){
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
 }
 function clearTargets(){
-  for (const t of targets){ scene.remove(t.obj); t.obj.geometry.dispose(); t.obj.material.map.dispose(); t.obj.material.dispose(); }
+  clearRing();
+  for (const t of targets){ scene.remove(t.obj); if (t.pole) scene.remove(t.pole); t.obj.geometry.dispose(); t.obj.material.map.dispose(); t.obj.material.dispose(); }
   targets = [];
   for (const f of fxs){ scene.remove(f.m); f.m.material.dispose(); }
   fxs = [];
   for (const k of tracers){ scene.remove(k.m); }
   tracers = [];
 }
-function spawnTargets(choices){
+function clearRing(){ if (hintRing){ if (hintRing.parent) hintRing.parent.remove(hintRing); hintRing.material.dispose(); hintRing = null; } }
+function showRing(){
+  clearRing();
+  const good = targets.find(x => x.m === curAns); if (!good) return;
+  hintRing = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({color:0xb6f5a4, side:THREE.DoubleSide, transparent:true, opacity:0.9, depthWrite:false}));
+  good.obj.add(hintRing);
+}
+// 抽 10 題＋場上 30 個量詞：保證每題的正確答案都在場上，而且場上沒有「也算對」的量詞
+function pickArena(){
+  const pool = itemPool(), Q = TOTAL;
+  let best = null;
+  for (let tries = 0; tries < 300; tries++){
+    const R = new Set(), F = new Set(), chosen = [];
+    for (const it of shuffle(pool)){
+      if (chosen.length >= Q) break;
+      const ans = it.a[(Math.random()*it.a.length)|0];
+      const alt = [...it.a, ...it.x].filter(m => m !== ans);
+      if (F.has(ans) || alt.some(m => R.has(m))) continue;
+      R.add(ans); alt.forEach(m => F.add(m)); chosen.push({it, ans});
+    }
+    const avail = MPOOL.filter(m => !F.has(m) && !R.has(m));
+    const size = R.size + avail.length;
+    const sc = Math.min(chosen.length, Q)*1000 + Math.min(size, ARENA_N);
+    if (!best || sc > best.sc) best = {sc, chosen, R, avail};
+    if (chosen.length >= Math.min(Q, pool.length) && size >= ARENA_N) break;
+  }
+  const qsList = [];
+  for (let i = 0; i < Q; i++) qsList.push(best.chosen[i % best.chosen.length]);
+  const field = [...best.R, ...shuffle(best.avail).slice(0, Math.max(0, ARENA_N - best.R.size))];
+  return {qs: qsList, field};
+}
+const locLocal = v => ((v + CH/2) % CH + CH) % CH - CH/2;
+function nearScenery(x, z){
+  const lx = locLocal(x), lz = locLocal(z);
+  for (const [tx,tz] of LAYOUT.trees) if (Math.hypot(lx-tx, lz-tz) < 7) return true;
+  for (const [hx,hz] of LAYOUT.houses) if (Math.hypot(lx-hx, lz-hz) < 12) return true;
+  return false;
+}
+function buildArena(){
   clearTargets();
-  const f = new THREE.Vector3(-Math.sin(D.yaw), 0, -Math.cos(D.yaw));
-  const angs = shuffle([-0.45, 0, 0.45]);
-  choices.forEach((m, i) => {
-    const dist = 50 + Math.random()*16, y = clamp(D.y + (Math.random()*8 - 3), 10, 60);
-    const dir = f.clone().applyAxisAngle(UP, angs[i]);
-    const obj = new THREE.Mesh(new THREE.PlaneGeometry(10,10), new THREE.MeshBasicMaterial({map:targetTex(m), transparent:true, depthWrite:false, side:THREE.DoubleSide}));
-    const base = new THREE.Vector3(D.x + dir.x*dist, y, D.z + dir.z*dist);
-    obj.position.copy(base); scene.add(obj);
-    targets.push({obj, m, base, ph:Math.random()*6.28, side:new THREE.Vector3(-dir.z, 0, dir.x), dead:false});
+  const {qs: q, field} = pickArena(); qs = q;
+  const types = shuffle(field.map((_, i) => i % 2 === 0));   // true = 立在地面
+  const pts = []; let guard = 0;
+  while (pts.length < field.length && guard < 20000){
+    guard++;
+    const sep = Math.max(22, 48 - Math.floor(guard/800)*6), gnd = types[pts.length];
+    const a = Math.random()*Math.PI*2, r = Math.sqrt(Math.random())*ARENA_R;
+    const x = Math.cos(a)*r, z = Math.sin(a)*r;
+    if (Math.hypot(x, z-6) < 35) continue;
+    if (pts.some(p => Math.hypot(p.x-x, p.z-z) < sep)) continue;
+    if (gnd && nearScenery(x, z)) continue;
+    pts.push({x, z, gnd, y: gnd ? 7.5 : 20 + Math.random()*38});
+  }
+  field.forEach((m, i) => {
+    const p = pts[i]; if (!p) return;
+    const obj = new THREE.Mesh(new THREE.PlaneGeometry(TS,TS), new THREE.MeshBasicMaterial({map:targetTex(m), transparent:true, depthWrite:false, side:THREE.DoubleSide}));
+    obj.position.set(p.x, p.y, p.z); scene.add(obj);
+    let pole = null;
+    if (p.gnd){ pole = new THREE.Mesh(poleGeo, poleMat); pole.position.set(p.x, 0.75, p.z); scene.add(pole); }
+    targets.push({obj, m, pole, gnd:p.gnd});
   });
 }
 function updateAmmo(){
@@ -435,7 +500,7 @@ function shoot(){
     hv.copy(t.obj.position).sub(camera.position);
     const tt = hv.dot(aimV); if (tt < 1) continue;
     const perp = hv.addScaledVector(aimV, -tt).length();
-    if (perp < 5.2 && tt < bt){ best = t; bt = tt; }
+    if (perp < HIT && tt < bt){ best = t; bt = tt; }
   }
   const rx = Math.cos(D.yaw), rz = -Math.sin(D.yaw);
   const from = new THREE.Vector3(camera.position.x + aimV.x*3 + rx*0.9, camera.position.y + aimV.y*3 - 0.9, camera.position.z + aimV.z*3 + rz*0.9);
@@ -445,43 +510,57 @@ function shoot(){
   if (best) judgeShot(best);
 }
 function judgeShot(t){
-  t.dead = true; t.obj.visible = false;
   const ok = target.a.includes(t.m);
   const full = target.a.map(m => `一${m}${target.n}`).join('／');
   if (ok){
-    score += 100; correct++; fbLose = false; addFx(t.obj.position, 0xb6f5a4); beep(880, 0.16, 'sine', 0.07);
-    feedback(true, '答對了！ +100', `${full}　${target.es}`);
+    const pts = hintUsed ? 50 : 100;
+    score += pts; correct++; fbLose = false; addFx(t.obj.position, 0xb6f5a4); beep(880, 0.16, 'sine', 0.07);
+    feedback(true, `答對了！ +${pts}${hintUsed ? '（有用提示）' : ''}`, `${full}　${target.es}`);
   } else {
     lives--; fbLose = lives <= 0; addFx(t.obj.position, 0xff8a6d); beep(180, 0.28, 'sawtooth', 0.06);
     feedback(false, '射錯了', `你射的是「${t.m}」　　正確是 ${full}`);
-    const good = targets.find(x => target.a.includes(x.m));
-    if (good && !good.dead){
-      const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({color:0xb6f5a4, side:THREE.DoubleSide, transparent:true, opacity:0.9, depthWrite:false}));
-      good.obj.add(ring);
-    }
+    showRing();
   }
   state = 'fb'; fbUntil = performance.now() + (ok ? 1800 : 3000); hudStats();
   if (cfg.listen) say(`一${curAns}${target.n}`);
 }
 function startShootRound(){
-  clearGates();
-  const pool = itemPool();
-  let it; do { it = pool[(Math.random()*pool.length)|0]; } while (it === prevTarget && pool.length > 1);
-  prevTarget = target = it;
-  curAns = it.a[(Math.random()*it.a.length)|0];
-  const ds = shuffle(MPOOL.filter(m => !it.a.includes(m) && !it.x.includes(m))).slice(0, 2);
-  spawnTargets(shuffle([curAns, ...ds]));
+  clearGates(); clearRing();
+  const q = qs[(round-1) % qs.length];
+  target = q.it; curAns = q.ans;
   ammo = MAG; reloadAt = 0; updateAmmo();
+  qT = 0; hintUsed = false; hintUntil = 0; $('hintA').style.display = 'none';
   state = 'play'; hudStats(); setPrompt();
-  if (cfg.listen) say(it.n);
+  if (cfg.listen) say(q.it.n);
+}
+function updateHint(now){
+  const box = $('hintA');
+  if (cfg.mode !== 'shoot' || state !== 'play' || now >= hintUntil){ box.style.display = 'none'; return; }
+  const tg = targets.find(x => x.m === curAns); if (!tg){ box.style.display = 'none'; return; }
+  const v = tg.obj.position.clone().sub(camera.position), dist = v.length();
+  v.applyQuaternion(camera.quaternion.clone().invert());
+  const lat = Math.hypot(v.x, v.y)/dist, behind = v.z > 0;
+  let ang = Math.atan2(v.x, v.y);
+  if (behind) ang = Math.atan2(v.x >= 0 ? 1 : -1, clamp(v.y/dist*2));
+  box.style.display = 'block';
+  $('hintR').style.transform = `rotate(${ang}rad)`;
+  $('hintR').style.opacity = (!behind && lat < 0.08) ? 0 : 1;
+  const ax = Math.abs(v.x), ay = Math.abs(v.y), side = v.x >= 0 ? '右' : '左';
+  let place;
+  if (behind) place = `${side}後方`;
+  else if (lat < 0.08) place = '就在正前方';
+  else if (ay > ax*1.2) place = v.y > 0 ? '前上方' : '前下方';
+  else place = ax > ay*1.2 ? `${side}前方` : (v.y > 0 ? `${side}上前方` : `${side}下前方`);
+  $('hintL').textContent = `${place}　約 ${Math.round(dist)} m`;
 }
 function updateShoot(dt, now){
   if (reloadAt && now >= reloadAt && state === 'play'){ ammo = MAG; reloadAt = 0; updateAmmo(); }
-  for (const t of targets){
-    const s = Math.sin(playT*1.1 + t.ph);
-    t.obj.position.set(t.base.x + t.side.x*s*2.5, t.base.y + Math.sin(playT*0.8 + t.ph*2)*1.2, t.base.z + t.side.z*s*2.5);
-    t.obj.lookAt(camera.position);
+  for (const t of targets) t.obj.lookAt(camera.position);
+  if (cfg.mode === 'shoot' && state === 'play'){
+    qT += dt;
+    if (!hintUsed && qT >= HINT_AFTER){ hintUsed = true; hintUntil = now + 3000; showRing(); beep(660, 0.14, 'sine', 0.06); }
   }
+  updateHint(now);
   for (let i = tracers.length - 1; i >= 0; i--){
     const k = tracers[i]; k.t += dt/0.14;
     k.m.position.lerpVectors(k.from, k.to, Math.min(k.t, 1));
@@ -650,11 +729,14 @@ function checkGates(){
 }
 function resetDrone(){ Object.assign(D, {x:0, y:12, z:6, yaw:0, vf:0, vs:0, vy:0, pitch:0, roll:0}); }
 function startGame(){
-  resetDrone(); clearGates(); round = 0; score = 0; lives = 3; correct = 0; playT = 0; prevTarget = null;
-  $('fb').className = ''; try{HGPlays.start(cfg.mode);}catch(e){} nextRound();
+  resetDrone(); clearGates(); clearTargets(); round = 0; score = 0; lives = 3; correct = 0; playT = 0; prevTarget = null;
+  $('fb').className = '';
+  if (cfg.mode === 'shoot') buildArena();
+  try{HGPlays.start(cfg.mode);}catch(e){}
+  nextRound();
 }
 function endGame(win){
-  state = 'end'; clearGates(); clearTargets(); $('fb').className = '';
+  state = 'end'; $('hintA').style.display = 'none'; clearGates(); clearTargets(); $('fb').className = '';
   $('endT').textContent = win ? '任務完成！' : '任務失敗';
   $('endS').textContent = String(score);
   $('endC').textContent = `答對 ${correct} / ${TOTAL}　　${cfg.mode === 'shoot' ? scopeLabel() : cfg.set}`;
@@ -705,6 +787,7 @@ function update(dt, now){
     $('alt').textContent = `${Math.round(D.y)} m`;
     $('spd').textContent = `${Math.round(Math.hypot(D.vf, D.vs, D.vy)*3.6)} km/h`;
     $('hd').textContent = headingText();
+    if (cfg.mode === 'shoot' && state === 'play') $('pc').textContent = `答對 ${correct} ・ ${hintUsed ? '提示中' : Math.max(0, Math.ceil(HINT_AFTER - qT)) + ' s'}`;
     const s = Math.floor(playT); $('tm').textContent = `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   }
 }
