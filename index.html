@@ -536,8 +536,16 @@ const MAG = 6;
 let curAns = '', ammo = MAG, reloadAt = 0;
 let targets = [], tracers = [], fxs = [];
 const aimV = new THREE.Vector3(), hv = new THREE.Vector3();
-const burstGeo = new THREE.SphereGeometry(1, 14, 10), tracerGeo = new THREE.BoxGeometry(0.12, 0.12, 5);
-const tracerMat = new THREE.MeshBasicMaterial({color:0xffd27a});
+const burstGeo = new THREE.SphereGeometry(1, 14, 10), sparkGeo = new THREE.SphereGeometry(1, 6, 5), fxRingGeo = new THREE.RingGeometry(0.72, 1, 36);
+const tracerCoreGeo = new THREE.BoxGeometry(0.18, 0.18, 5), tracerGlowGeo = new THREE.BoxGeometry(0.55, 0.55, 6.5);
+const tracerCoreMat = new THREE.MeshBasicMaterial({color:0xfff6d6});
+const tracerGlowMat = new THREE.MeshBasicMaterial({color:0xffa23a, transparent:true, opacity:0.5, depthWrite:false, blending:THREE.AdditiveBlending});
+const TRAVEL = 0.28;   // 子彈飛行時間（秒），打到才爆炸、才算分
+function makeTracer(){
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(tracerCoreGeo, tracerCoreMat), new THREE.Mesh(tracerGlowGeo, tracerGlowMat));
+  return g;
+}
 const ringGeo = new THREE.RingGeometry(6.6, 7.4, 40);
 const poleGeo = new THREE.CylinderGeometry(0.35, 0.45, 1.5, 6);
 const ARENA_N = 30, ARENA_R = 260, HINT_AFTER = 20, TS = 12, HIT = 5.6;
@@ -553,6 +561,38 @@ function beep(f, d = 0.08, type = 'square', v = 0.05){
     o.start(); g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d); o.stop(actx.currentTime + d);
   } catch (e) {}
 }
+/* 射擊音效：全部用程式合成，不用音檔 */
+let noiseBuf = null, lastEmpty = 0;
+function ac(){ actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); return actx; }
+function tone(f0, f1, d, type = 'square', v = 0.05, delay = 0){
+  try {
+    const a = ac(), t0 = a.currentTime + delay, o = a.createOscillator(), g = a.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t0); o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t0 + d);
+    g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+    o.connect(g); g.connect(a.destination); o.start(t0); o.stop(t0 + d + 0.02);
+  } catch (e) {}
+}
+function noise(d, v, fa, fb, type = 'lowpass', delay = 0){
+  try {
+    const a = ac(), t0 = a.currentTime + delay;
+    if (!noiseBuf){ noiseBuf = a.createBuffer(1, a.sampleRate, a.sampleRate); const ch = noiseBuf.getChannelData(0); for (let i = 0; i < ch.length; i++) ch[i] = Math.random()*2 - 1; }
+    const s = a.createBufferSource(); s.buffer = noiseBuf;
+    const f = a.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(fa, t0); f.frequency.exponentialRampToValueAtTime(Math.max(20, fb), t0 + d);
+    const g = a.createGain(); g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+    s.connect(f); f.connect(g); g.connect(a.destination); s.start(t0); s.stop(t0 + d + 0.02);
+  } catch (e) {}
+}
+const sfx = {
+  shoot(){ tone(1100, 160, 0.13, 'sawtooth', 0.05); noise(0.07, 0.05, 6000, 1500, 'highpass'); },
+  empty(){ const n = performance.now(); if (n - lastEmpty < 160) return; lastEmpty = n; tone(260, 200, 0.04, 'square', 0.05); tone(180, 140, 0.05, 'square', 0.04, 0.06); },
+  reloadStart(){ noise(0.16, 0.05, 2500, 500); tone(420, 260, 0.07, 'square', 0.04); },
+  reloadDone(){ tone(700, 500, 0.05, 'square', 0.05); tone(1000, 800, 0.06, 'square', 0.05, 0.1); noise(0.05, 0.04, 5000, 2000, 'highpass', 0.1); },
+  boom(ok){
+    noise(0.55, 0.14, 2200, 120); tone(160, 38, 0.45, 'sine', 0.14);
+    if (ok){ tone(660, 660, 0.09, 'sine', 0.06, 0.2); tone(880, 880, 0.09, 'sine', 0.06, 0.3); tone(1175, 1175, 0.18, 'sine', 0.07, 0.4); }
+    else tone(240, 110, 0.4, 'sawtooth', 0.05, 0.2);
+  }
+};
 function targetTex(m){
   const c = document.createElement('canvas'); c.width = c.height = 512;
   const g = c.getContext('2d');
@@ -578,7 +618,7 @@ function clearTargets(){
 function clearRing(){ if (hintRing){ if (hintRing.parent) hintRing.parent.remove(hintRing); hintRing.material.dispose(); hintRing = null; } }
 function showRing(){
   clearRing();
-  const good = targets.find(x => x.m === curAns); if (!good) return;
+  const good = targets.find(x => x.m === curAns && !x.dead); if (!good) return;
   hintRing = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({color:0xb6f5a4, side:THREE.DoubleSide, transparent:true, opacity:0.9, depthWrite:false}));
   good.obj.add(hintRing);
 }
@@ -626,31 +666,64 @@ function buildArena(){
     }
     pts.push({x, z, gnd, gy: Math.max(h, 0), y: gnd ? h + 7.5 : Math.min(66, Math.max(h, 0) + 20 + Math.random()*38)});
   }
-  field.forEach((m, i) => {
-    const p = pts[i]; if (!p) return;
-    const obj = new THREE.Mesh(new THREE.PlaneGeometry(TS,TS), new THREE.MeshBasicMaterial({map:targetTex(m), transparent:true, depthWrite:false, side:THREE.DoubleSide}));
-    obj.position.set(p.x, p.y, p.z); scene.add(obj);
-    let pole = null;
-    if (p.gnd){ pole = new THREE.Mesh(poleGeo, poleMat); pole.position.set(p.x, p.gy + 0.75, p.z); scene.add(pole); }
-    targets.push({obj, m, pole, gnd:p.gnd});
-  });
+  field.forEach((m, i) => { const p = pts[i]; if (p) makeTarget(m, p); });
+}
+function makeTarget(m, p){
+  const obj = new THREE.Mesh(new THREE.PlaneGeometry(TS,TS), new THREE.MeshBasicMaterial({map:targetTex(m), transparent:true, depthWrite:false, side:THREE.DoubleSide}));
+  obj.position.set(p.x, p.y, p.z); scene.add(obj);
+  let pole = null;
+  if (p.gnd){ pole = new THREE.Mesh(poleGeo, poleMat); pole.position.set(p.x, p.gy + 0.75, p.z); scene.add(pole); }
+  targets.push({obj, m, pole, gnd:p.gnd});
+}
+// 這題的正確答案已經被打掉了（前面的題打過同一個量詞）：在離無人機有點距離的新位置重新放一個
+function respawnTarget(m){
+  for (let guard = 0; guard < 6000; guard++){
+    const gnd = Math.random() < 0.5;
+    const a = Math.random()*Math.PI*2, r = Math.sqrt(Math.random())*ARENA_R;
+    const x = Math.cos(a)*r, z = Math.sin(a)*r;
+    if (Math.hypot(x - D.x, z - D.z) < 50 || wallDist(x, z) < 20) continue;
+    if (targets.some(t => !t.dead && Math.hypot(t.obj.position.x - x, t.obj.position.z - z) < 28)) continue;
+    const h = groundH(x, z);
+    if (gnd){
+      if (nearScenery(x, z) || h < -0.2) continue;
+      if (Math.abs(groundH(x+5, z) - h) > 3 || Math.abs(groundH(x, z+5) - h) > 3) continue;
+    }
+    makeTarget(m, {x, z, gnd, gy: Math.max(h, 0), y: gnd ? h + 7.5 : Math.min(66, Math.max(h, 0) + 20 + Math.random()*38)});
+    return true;
+  }
+  return false;
 }
 function updateAmmo(){
   $('ammo').textContent = reloadAt ? 'RELOAD…' : '●'.repeat(ammo) + '○'.repeat(MAG - ammo);
 }
 function startReload(){
   if (cfg.mode !== 'shoot' || state !== 'play' || reloadAt || ammo >= MAG) return;
-  ammo = 0; reloadAt = performance.now() + 1400; updateAmmo();
+  ammo = 0; reloadAt = performance.now() + 1400; updateAmmo(); sfx.reloadStart();
 }
-function addFx(pos, color){
-  const m = new THREE.Mesh(burstGeo, new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.8, depthWrite:false}));
-  m.position.copy(pos); scene.add(m); fxs.push({m, t:0});
+// 特效：球形閃光、擴散圈、飛散火花。s0→s1 是大小變化，op 是起始透明度，dur 是秒數
+function addFx(pos, color, o){
+  const mat = new THREE.MeshBasicMaterial({color, transparent:true, opacity:o.op, depthWrite:false, side:THREE.DoubleSide, blending:o.add ? THREE.AdditiveBlending : THREE.NormalBlending});
+  const m = new THREE.Mesh(o.geo || burstGeo, mat);
+  m.position.copy(pos); m.scale.setScalar(o.s0); scene.add(m);
+  fxs.push({m, t:0, dur:o.dur, s0:o.s0, s1:o.s1, op:o.op, vel:o.vel || null, face:!!o.face});
+}
+function explode(pos, ok){
+  const col = ok ? 0xb6f5a4 : 0xff8a6d;
+  addFx(pos, 0xffffff, {geo:burstGeo, s0:1, s1:6, op:0.95, dur:0.22, add:true});          // 白色核心閃光
+  addFx(pos, col, {geo:burstGeo, s0:2, s1:10, op:0.6, dur:0.45, add:true});               // 彩色外暈
+  addFx(pos, col, {geo:fxRingGeo, s0:2, s1:15, op:0.95, dur:0.5, face:true});             // 擴散圈
+  for (let i = 0; i < 16; i++){                                                           // 飛散火花
+    const a = Math.random()*Math.PI*2, e = (Math.random() - 0.3)*Math.PI*0.9, sp = 30 + Math.random()*35;
+    const vel = new THREE.Vector3(Math.cos(a)*Math.cos(e)*sp, Math.sin(e)*sp, Math.sin(a)*Math.cos(e)*sp);
+    addFx(pos, i % 2 ? 0xffffff : col, {geo:sparkGeo, s0:1.3, s1:0.4, op:1, dur:0.45 + Math.random()*0.3, add:true, vel});
+  }
 }
 function shoot(){
-  if (cfg.mode !== 'shoot' || state !== 'play' || reloadAt) return;
+  if (cfg.mode !== 'shoot' || state !== 'play') return;
+  if (reloadAt){ sfx.empty(); return; }
   if (ammo <= 0){ startReload(); return; }
-  ammo--; if (ammo <= 0) reloadAt = performance.now() + 1400;
-  updateAmmo(); beep(520, 0.07);
+  ammo--; if (ammo <= 0){ reloadAt = performance.now() + 1400; setTimeout(sfx.reloadStart, 220); }
+  updateAmmo(); sfx.shoot();
   camera.getWorldDirection(aimV);
   let best = null, bt = 1e9;
   for (const t of targets){
@@ -661,31 +734,40 @@ function shoot(){
     if (perp < HIT && tt < bt && !lineBlocked(camera.position.x, camera.position.z, t.obj.position.x, t.obj.position.z)){ best = t; bt = tt; }
   }
   const rx = Math.cos(D.yaw), rz = -Math.sin(D.yaw);
-  const from = new THREE.Vector3(camera.position.x + aimV.x*3 + rx*0.9, camera.position.y + aimV.y*3 - 0.9, camera.position.z + aimV.z*3 + rz*0.9);
+  const from = new THREE.Vector3(camera.position.x + aimV.x*6 + rx*1.2, camera.position.y + aimV.y*6 - 1.1, camera.position.z + aimV.z*6 + rz*1.2);
   const to = best ? best.obj.position.clone() : camera.position.clone().addScaledVector(aimV, 160);
-  const m = new THREE.Mesh(tracerGeo, tracerMat); m.position.copy(from); m.lookAt(to); scene.add(m);
-  tracers.push({m, from, to, t:0});
-  if (best) judgeShot(best);
+  const m = makeTracer(); m.position.copy(from); m.lookAt(to); scene.add(m);
+  addFx(from, 0xffd27a, {geo:burstGeo, s0:0.5, s1:1.6, op:0.9, dur:0.1, add:true});     // 槍口閃光
+  const hit = best ? {t:best, ok:judgeShot(best)} : null;
+  tracers.push({m, from, to, t:0, hit});
 }
+// 按下射擊的當下：先鎖定答題狀態（不能連續亂射）；等子彈飛到才算分、爆炸
 function judgeShot(t){
   const ok = target.a.includes(t.m);
+  state = 'fb'; fbLose = false; fbUntil = performance.now() + TRAVEL*1000 + (ok ? 1800 : 3000); hudStats();
+  return ok;
+}
+function resolveHit(t, ok){
   const full = target.a.map(m => `一${m}${target.n}`).join('／');
   if (ok){
     const pts = hintUsed ? 50 : 100;
-    score += pts; correct++; fbLose = false; addFx(t.obj.position, 0xb6f5a4); beep(880, 0.16, 'sine', 0.07);
+    score += pts; correct++; fbLose = false; clearRing();
     feedback(true, `答對了！ +${pts}${hintUsed ? '（有用提示）' : ''}`, `${full}　${target.es}`);
   } else {
-    lives--; fbLose = lives <= 0; addFx(t.obj.position, 0xff8a6d); beep(180, 0.28, 'sawtooth', 0.06);
+    lives--; fbLose = lives <= 0;
     feedback(false, '射錯了', `你射的是「${t.m}」　　正確是 ${full}`);
     showRing();
   }
-  state = 'fb'; fbUntil = performance.now() + (ok ? 1800 : 3000); hudStats();
+  explode(t.obj.position, ok); sfx.boom(ok);
+  t.dead = true; t.vt = 0;          // 被射中的量詞：爆炸後縮小消失
+  hudStats();
   if (cfg.listen) say(`一${curAns}${target.n}`);
 }
 function startShootRound(){
   clearGates(); clearRing();
   const q = qs[(round-1) % qs.length];
   target = q.it; curAns = q.ans;
+  if (!targets.some(x => x.m === curAns && !x.dead)) respawnTarget(curAns);
   ammo = MAG; reloadAt = 0; updateAmmo();
   qT = 0; hintUsed = false; hintUntil = 0; $('hintA').style.display = 'none';
   state = 'play'; hudStats(); setPrompt();
@@ -694,7 +776,7 @@ function startShootRound(){
 function updateHint(now){
   const box = $('hintA');
   if (cfg.mode !== 'shoot' || state !== 'play' || now >= hintUntil){ box.style.display = 'none'; return; }
-  const tg = targets.find(x => x.m === curAns); if (!tg){ box.style.display = 'none'; return; }
+  const tg = targets.find(x => x.m === curAns && !x.dead); if (!tg){ box.style.display = 'none'; return; }
   const v = tg.obj.position.clone().sub(camera.position), dist = v.length();
   v.applyQuaternion(camera.quaternion.clone().invert());
   const lat = Math.hypot(v.x, v.y)/dist, behind = v.z > 0;
@@ -712,7 +794,7 @@ function updateHint(now){
   $('hintL').textContent = `${place}　約 ${Math.round(dist)} m`;
 }
 function updateShoot(dt, now){
-  if (reloadAt && now >= reloadAt && state === 'play'){ ammo = MAG; reloadAt = 0; updateAmmo(); }
+  if (reloadAt && now >= reloadAt && state === 'play'){ ammo = MAG; reloadAt = 0; updateAmmo(); sfx.reloadDone(); }
   for (const t of targets) t.obj.lookAt(camera.position);
   if (cfg.mode === 'shoot' && state === 'play'){
     qT += dt;
@@ -720,14 +802,31 @@ function updateShoot(dt, now){
   }
   updateHint(now);
   for (let i = tracers.length - 1; i >= 0; i--){
-    const k = tracers[i]; k.t += dt/0.14;
+    const k = tracers[i]; k.t += dt/TRAVEL;
     k.m.position.lerpVectors(k.from, k.to, Math.min(k.t, 1));
-    if (k.t >= 1){ scene.remove(k.m); tracers.splice(i, 1); }
+    const sc = clamp(k.m.position.distanceTo(camera.position)/22, 1, 6);   // 越遠越粗，才看得到
+    k.m.scale.set(sc, sc, 1);
+    if (k.t >= 1){ scene.remove(k.m); tracers.splice(i, 1); if (k.hit) resolveHit(k.hit.t, k.hit.ok); }
   }
   for (let i = fxs.length - 1; i >= 0; i--){
-    const f = fxs[i]; f.t += dt/0.35;
-    f.m.scale.setScalar(1 + f.t*5); f.m.material.opacity = 0.8*Math.max(0, 1 - f.t);
+    const f = fxs[i]; f.t += dt/f.dur;
+    const e = Math.min(f.t, 1);
+    f.m.scale.setScalar(Math.max(0.01, f.s0 + (f.s1 - f.s0)*(1 - (1-e)*(1-e))));
+    f.m.material.opacity = f.op*Math.max(0, 1 - f.t);
+    if (f.vel){ f.m.position.addScaledVector(f.vel, dt); f.vel.y -= 25*dt; }
+    if (f.face) f.m.lookAt(camera.position);
     if (f.t >= 1){ scene.remove(f.m); f.m.material.dispose(); fxs.splice(i, 1); }
+  }
+  for (let i = targets.length - 1; i >= 0; i--){          // 被射中的量詞縮小消失
+    const t = targets[i]; if (!t.dead) continue;
+    t.vt += dt/0.18;
+    const s = Math.max(0.001, 1 - t.vt);
+    t.obj.scale.setScalar(s); if (t.pole) t.pole.scale.setScalar(s);
+    if (t.vt >= 1){
+      scene.remove(t.obj); if (t.pole) scene.remove(t.pole);
+      t.obj.geometry.dispose(); t.obj.material.map.dispose(); t.obj.material.dispose();
+      targets.splice(i, 1);
+    }
   }
 }
 
