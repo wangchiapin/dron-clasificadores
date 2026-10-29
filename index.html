@@ -265,8 +265,6 @@ function groundTex(){
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(30,30); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return t;
 }
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(1800,1800), new THREE.MeshLambertMaterial({map:groundTex()}));
-ground.rotation.x = -Math.PI/2; scene.add(ground);
 // 遠山（跟著無人機移動，永遠在遠方）
 const peaks = new THREE.Group();
 {
@@ -279,48 +277,205 @@ const peaks = new THREE.Group();
 }
 scene.add(peaks);
 
-// 地形區塊：3×3 塊輪流接力，所以怎麼飛都不會到邊界
-const CH = 400;
+// 地形：山丘＋河川（用公式算，不重複）；岩壁只在射擊模式出現，高度超過無人機上限所以必須繞過去
+const sstep = (a,b,x) => { const t = Math.max(0, Math.min(1, (x-a)/(b-a))); return t*t*(3-2*t); };
+function hash2(i,j){ let h = Math.imul(i, 374761393) ^ Math.imul(j, 668265263) ^ 0x5bd1e995; h = Math.imul(h ^ (h>>>13), 1274126177); return ((h ^ (h>>>16))>>>0)/4294967296; }
+function vnoise(x,z){
+  const i = Math.floor(x), j = Math.floor(z), fx = x-i, fz = z-j, u = fx*fx*(3-2*fx), v = fz*fz*(3-2*fz);
+  const a = hash2(i,j), b = hash2(i+1,j), c = hash2(i,j+1), d = hash2(i+1,j+1);
+  return a + (b-a)*u + (c-a)*v + (a-b-c+d)*u*v;
+}
+const RIV = [{a:0.35, sp:520, ph:0}, {a:1.9, sp:700, ph:130}];
+function riverDist(x,z){
+  let best = 1e9;
+  for (const R of RIV){
+    const c = Math.cos(R.a), s = Math.sin(R.a), u = x*c + z*s, v = -x*s + z*c;
+    const q = u + 70*Math.sin(v/170 + R.ph) + 28*Math.sin(v/63 + R.ph*2) + R.ph;
+    const t = ((q % R.sp) + R.sp) % R.sp;
+    best = Math.min(best, Math.abs(t - R.sp/2));
+  }
+  return best;
+}
+const WATER_Y = -0.4;
+function groundH(x,z){
+  const calm = sstep(50, 130, Math.hypot(x, z-6));            // 出生點附近保持平坦
+  const rd = riverDist(x,z);
+  const rv = (1 - sstep(6, 18, rd)) * calm;                   // 河道（1 = 河中央）
+  const hn = vnoise(x/300 + 3.1, z/300 + 9.7)*0.62 + vnoise(x/120 + 5.5, z/120 + 1.3)*0.38;
+  const hill = sstep(0.54, 0.8, hn) * 22 * calm * sstep(14, 60, rd);
+  return hill - rv*3.4;
+}
+const isWater = (x,z) => groundH(x,z) < WATER_Y - 0.05;
+
+const SNAP = 120, TG = 240, TW = 1800;
+const tgeo = new THREE.PlaneGeometry(TW, TW, TG, TG); tgeo.rotateX(-Math.PI/2);
+tgeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(tgeo.attributes.position.count*3), 3));
+const terrain = new THREE.Mesh(tgeo, new THREE.MeshLambertMaterial({map:groundTex(), vertexColors:true}));
+terrain.frustumCulled = false; scene.add(terrain);
+const water = new THREE.Mesh(new THREE.PlaneGeometry(TW, TW), new THREE.MeshLambertMaterial({color:0x3b6678, transparent:true, opacity:0.9}));
+water.rotation.x = -Math.PI/2; water.position.y = WATER_Y; scene.add(water);
+function rebuildTerrain(cx, cz){
+  const pos = tgeo.attributes.position, col = tgeo.attributes.color;
+  for (let i = 0; i < pos.count; i++){
+    const h = groundH(cx + pos.getX(i), cz + pos.getZ(i)); pos.setY(i, h);
+    const t = sstep(4, 22, h);
+    col.setXYZ(i, 1 - 0.2*t, 1 - 0.22*t, 1 - 0.34*t);
+  }
+  pos.needsUpdate = true; col.needsUpdate = true; tgeo.computeVertexNormals();
+}
+
+// 岩壁
+const WC = 280, WR = 8.5;
+const wallCache = new Map();
+function segPt(px, pz, s){
+  const dx = s.bx - s.ax, dz = s.bz - s.az, l2 = dx*dx + dz*dz;
+  const t = l2 ? Math.max(0, Math.min(1, ((px-s.ax)*dx + (pz-s.az)*dz)/l2)) : 0;
+  const cx = s.ax + dx*t, cz = s.az + dz*t;
+  return {d: Math.hypot(px-cx, pz-cz), x: cx, z: cz};
+}
+function wallCell(ci, cj){
+  const key = ci + ',' + cj; let w = wallCache.get(key); if (w) return w;
+  const r = mulberry(Math.imul(ci, 73856093) ^ Math.imul(cj, 19349663) ^ 0x3a7c);
+  w = {segs: [], pieces: []};
+  if (r() < 0.88){
+    const mx = (ci + 0.15 + 0.7*r())*WC, mz = (cj + 0.15 + 0.7*r())*WC, ang = r()*Math.PI, half = 45 + r()*35;
+    const ux = Math.cos(ang), uz = Math.sin(ang), bend = (r()-0.5)*24;
+    const A = {x: mx - ux*half, z: mz - uz*half}, M = {x: mx - uz*bend, z: mz + ux*bend}, B = {x: mx + ux*half, z: mz + uz*half};
+    const all = [{ax:A.x, az:A.z, bx:M.x, bz:M.z}, {ax:M.x, az:M.z, bx:B.x, bz:B.z}];
+    if (all.every(s => segPt(0, 6, s).d > 100)){
+      w.segs = all;
+      for (const s of all){
+        const len = Math.hypot(s.bx-s.ax, s.bz-s.az), n = Math.ceil(len/11), a = Math.atan2(s.bz-s.az, s.bx-s.ax);
+        for (let k = 0; k < n; k++){
+          const t = (k+0.5)/n;
+          w.pieces.push({x: s.ax + (s.bx-s.ax)*t, z: s.az + (s.bz-s.az)*t, a, len: len/n*1.3, th: 9 + r()*4, top: 88 + r()*32, tx: (r()-0.5)*0.08, tz: (r()-0.5)*0.08, l: 0.3 + r()*0.12});
+        }
+      }
+    }
+  }
+  wallCache.set(key, w); return w;
+}
+function wallDist(x, z){
+  const ci = Math.floor(x/WC), cj = Math.floor(z/WC); let best = 1e9;
+  for (let i = ci-1; i <= ci+1; i++) for (let j = cj-1; j <= cj+1; j++) for (const s of wallCell(i,j).segs) best = Math.min(best, segPt(x, z, s).d);
+  return best;
+}
+function segCross(ax, az, bx, bz, cx, cz, dx, dz){
+  const d1x = bx-ax, d1z = bz-az, d2x = dx-cx, d2z = dz-cz, den = d1x*d2z - d1z*d2x;
+  if (Math.abs(den) < 1e-9) return false;
+  const t = ((cx-ax)*d2z - (cz-az)*d2x)/den, u = ((cx-ax)*d1z - (cz-az)*d1x)/den;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+}
+function lineBlocked(ax, az, bx, bz){          // 子彈會被岩壁擋住
+  const c0 = Math.floor(Math.min(ax,bx)/WC) - 1, c1 = Math.floor(Math.max(ax,bx)/WC) + 1;
+  const r0 = Math.floor(Math.min(az,bz)/WC) - 1, r1 = Math.floor(Math.max(az,bz)/WC) + 1;
+  for (let i = c0; i <= c1; i++) for (let j = r0; j <= r1; j++)
+    for (const s of wallCell(i,j).segs) if (segCross(ax, az, bx, bz, s.ax, s.az, s.bx, s.bz)) return true;
+  return false;
+}
+let lastWallMsg = 0;
+function collideWalls(now){
+  const ci = Math.floor(D.x/WC), cj = Math.floor(D.z/WC);
+  for (let i = ci-1; i <= ci+1; i++) for (let j = cj-1; j <= cj+1; j++) for (const s of wallCell(i,j).segs){
+    const p = segPt(D.x, D.z, s); if (p.d >= WR) continue;
+    let nx = D.x - p.x, nz = D.z - p.z; const l = Math.hypot(nx, nz) || 1e-3; nx /= l; nz /= l;
+    D.x = p.x + nx*WR; D.z = p.z + nz*WR;
+    const fx = -Math.sin(D.yaw), fz = -Math.cos(D.yaw), rx = Math.cos(D.yaw), rz = -Math.sin(D.yaw);
+    let wx = fx*D.vf + rx*D.vs, wz = fz*D.vf + rz*D.vs; const vn = wx*nx + wz*nz;
+    if (vn < 0){ wx -= vn*nx; wz -= vn*nz; D.vf = wx*fx + wz*fz; D.vs = wx*rx + wz*rz; }
+    if (now - lastWallMsg > 2500){ lastWallMsg = now; beep(110, 0.12, 'sawtooth', 0.04); try{ toast('撞到岩壁了，繞過去！'); }catch(e){} }
+  }
+}
+
+// 樹和房子：依世界座標分格產生（不重複），會避開河、岩壁，房子只蓋在平地
 const treeGeo = new THREE.CylinderGeometry(0.4,0.5,3,5), crownGeo = new THREE.ConeGeometry(2.6,7,6);
 const trunkMat = new THREE.MeshLambertMaterial({color:0x4a3a2c}), crownMat = new THREE.MeshLambertMaterial({color:0xffffff});
 const wallMat = new THREE.MeshLambertMaterial({color:0xb6ae9c}), roofMat = new THREE.MeshLambertMaterial({color:0x6a4a3e});
-const roadMat = new THREE.MeshLambertMaterial({color:0x5f5d52});
 const houseGeo = new THREE.BoxGeometry(8,5,6), roofGeo = new THREE.ConeGeometry(6.2,3,4);
-const road1Geo = new THREE.PlaneGeometry(9,CH), road2Geo = new THREE.PlaneGeometry(CH,9);
-const LAYOUT = {trees:[], houses:[]};
-let layoutRec = true;
-function makeChunk(){
-  const rnd = mulberry(777), g = new THREE.Group();
-  const r1 = new THREE.Mesh(road1Geo, roadMat); r1.rotation.x = -Math.PI/2; r1.position.y = 0.04; g.add(r1);
-  const r2 = new THREE.Mesh(road2Geo, roadMat); r2.rotation.x = -Math.PI/2; r2.position.y = 0.05; g.add(r2);
-  const N = 70;
-  const trunk = new THREE.InstancedMesh(treeGeo, trunkMat, N), crown = new THREE.InstancedMesh(crownGeo, crownMat, N);
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), col = new THREE.Color();
-  for (let i=0;i<N;i++){
-    let x, z; do { x = (rnd()-0.5)*CH; z = (rnd()-0.5)*CH; } while (Math.abs(x) < 10 || Math.abs(z) < 10);
-    if (layoutRec) LAYOUT.trees.push([x,z]);
-    const s = 0.8 + rnd()*0.9; sc.set(s,s,s);
-    ps.set(x,1.5*s,z); m4.compose(ps,q,sc); trunk.setMatrixAt(i,m4);
-    ps.set(x,6.5*s,z); m4.compose(ps,q,sc); crown.setMatrixAt(i,m4);
-    col.setHSL(0.27+rnd()*0.06, 0.28, 0.16+rnd()*0.07); crown.setColorAt(i,col);
+const rockMat = new THREE.MeshLambertMaterial({color:0xffffff, flatShading:true});
+const SC = 120, RC = 5, MAXT = 1100, MAXH = 60, MAXW = 1300;
+const sceneCache = new Map();
+function sceneCell(ci, cj){
+  const key = ci + ',' + cj; let c = sceneCache.get(key); if (c) return c;
+  const r = mulberry(Math.imul(ci, 83492791) ^ Math.imul(cj, 41729573) ^ 0x51ed);
+  c = {trees: [], houses: []};
+  const nT = 5 + ((r()*3)|0);
+  for (let k = 0; k < nT; k++){
+    const x = (ci + r())*SC, z = (cj + r())*SC, s = 0.8 + r()*0.9, hu = r(), li = r();
+    if (Math.hypot(x, z-6) < 24 || riverDist(x,z) < 20 || wallDist(x,z) < 14) continue;
+    c.trees.push({x, z, s, y: Math.max(groundH(x,z), 0), hu, li});
   }
-  g.add(trunk, crown);
-  for (let i=0;i<3;i++){
-    let x, z; do { x = (rnd()-0.5)*(CH-40); z = (rnd()-0.5)*(CH-40); } while (Math.abs(x) < 16 || Math.abs(z) < 16);
-    if (layoutRec) LAYOUT.houses.push([x,z]);
-    const b = new THREE.Mesh(houseGeo, wallMat); b.position.set(x,2.5,z);
-    const r = new THREE.Mesh(roofGeo, roofMat); r.position.set(x,6.5,z); r.rotation.y = Math.PI/4; r.scale.set(1.05,1,0.85);
-    g.add(b, r);
+  if (r() < 0.18){
+    const x = (ci + 0.1 + 0.8*r())*SC, z = (cj + 0.1 + 0.8*r())*SC;
+    if (Math.hypot(x, z-6) > 45 && riverDist(x,z) > 30 && wallDist(x,z) > 20){
+      const h0 = groundH(x,z);
+      let flat = true; for (const [ox,oz] of [[9,0],[-9,0],[0,8],[0,-8]]) if (Math.abs(groundH(x+ox,z+oz) - h0) > 1.2) flat = false;
+      if (flat && h0 > -0.2) c.houses.push({x, z, y: Math.max(h0,0)});
+    }
   }
-  layoutRec = false;
-  scene.add(g); return g;
+  sceneCache.set(key, c); return c;
 }
-const chunks = [];
-for (let i=-1;i<=1;i++) for (let j=-1;j<=1;j++) chunks.push({g:makeChunk(), i, j});
+function nearScenery(x, z){
+  const ci = Math.floor(x/SC), cj = Math.floor(z/SC);
+  for (let i = ci-1; i <= ci+1; i++) for (let j = cj-1; j <= cj+1; j++){
+    const c = sceneCell(i,j);
+    for (const t of c.trees) if (Math.hypot(x-t.x, z-t.z) < 7) return true;
+    for (const h of c.houses) if (Math.hypot(x-h.x, z-h.z) < 12) return true;
+  }
+  return false;
+}
+const treeTrunk = new THREE.InstancedMesh(treeGeo, trunkMat, MAXT), treeCrown = new THREE.InstancedMesh(crownGeo, crownMat, MAXT);
+const houseBody = new THREE.InstancedMesh(houseGeo, wallMat, MAXH), houseRoof = new THREE.InstancedMesh(roofGeo, roofMat, MAXH);
+const rocks = new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1), rockMat, MAXW);
+for (const m of [treeTrunk, treeCrown, houseBody, houseRoof, rocks]){ m.frustumCulled = false; scene.add(m); }
+{ const c = new THREE.Color(1,1,1); for (let i = 0; i < MAXT; i++) treeCrown.setColorAt(i, c); for (let i = 0; i < MAXW; i++) rocks.setColorAt(i, c); }
+const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _sc = new THREE.Vector3(), _ps = new THREE.Vector3(), _col = new THREE.Color(), _eu = new THREE.Euler();
+function rebuildScenery(cx, cz, wallsOn){
+  const i0 = Math.round(cx/SC), j0 = Math.round(cz/SC);
+  let nt = 0, nh = 0; _q.identity();
+  for (let i = i0-RC; i <= i0+RC; i++) for (let j = j0-RC; j <= j0+RC; j++){
+    const c = sceneCell(i,j);
+    for (const t of c.trees){
+      if (nt >= MAXT) break;
+      _sc.set(t.s, t.s, t.s);
+      _ps.set(t.x, t.y + 1.5*t.s, t.z); _m4.compose(_ps, _q, _sc); treeTrunk.setMatrixAt(nt, _m4);
+      _ps.set(t.x, t.y + 6.5*t.s, t.z); _m4.compose(_ps, _q, _sc); treeCrown.setMatrixAt(nt, _m4);
+      _col.setHSL(0.27 + t.hu*0.06, 0.28, 0.16 + t.li*0.07); treeCrown.setColorAt(nt, _col); nt++;
+    }
+    for (const h of c.houses){
+      if (nh >= MAXH) break;
+      _sc.set(1,1,1); _ps.set(h.x, h.y + 2.5, h.z); _m4.compose(_ps, _q, _sc); houseBody.setMatrixAt(nh, _m4);
+      _q.setFromAxisAngle(UP, Math.PI/4); _sc.set(1.05, 1, 0.85); _ps.set(h.x, h.y + 6.5, h.z); _m4.compose(_ps, _q, _sc); houseRoof.setMatrixAt(nh, _m4);
+      _q.identity(); nh++;
+    }
+  }
+  treeTrunk.count = treeCrown.count = nt; houseBody.count = houseRoof.count = nh;
+  treeTrunk.instanceMatrix.needsUpdate = treeCrown.instanceMatrix.needsUpdate = true; treeCrown.instanceColor.needsUpdate = true;
+  houseBody.instanceMatrix.needsUpdate = houseRoof.instanceMatrix.needsUpdate = true;
+  let nr = 0;
+  if (wallsOn){
+    const w0 = Math.round(cx/WC), w1 = Math.round(cz/WC);
+    for (let i = w0-4; i <= w0+4; i++) for (let j = w1-4; j <= w1+4; j++) for (const p of wallCell(i,j).pieces){
+      if (nr >= MAXW) break;
+      _eu.set(p.tx, -p.a, p.tz, 'YXZ'); _q.setFromEuler(_eu);
+      _sc.set(p.len, p.top + 10, p.th); _ps.set(p.x, (p.top - 10)/2, p.z); _m4.compose(_ps, _q, _sc); rocks.setMatrixAt(nr, _m4);
+      _col.setHSL(0.09, 0.07, p.l); rocks.setColorAt(nr, _col); nr++;
+    }
+    _q.identity();
+  }
+  rocks.count = nr; rocks.instanceMatrix.needsUpdate = true; rocks.instanceColor.needsUpdate = true;
+}
+let sceneKey = '';
 function followWorld(){
-  const cx = Math.round(D.x/CH)*CH, cz = Math.round(D.z/CH)*CH;
-  for (const c of chunks) c.g.position.set(cx + c.i*CH, 0, cz + c.j*CH);
-  ground.position.set(Math.round(D.x/60)*60, 0, Math.round(D.z/60)*60);
+  const cx = Math.round(D.x/SNAP)*SNAP, cz = Math.round(D.z/SNAP)*SNAP, wo = cfg.mode === 'shoot';
+  const key = cx + ',' + cz + ',' + wo;
+  if (key !== sceneKey){
+    const moved = sceneKey.split(',').slice(0,2).join() !== cx + ',' + cz;
+    sceneKey = key;
+    if (moved) rebuildTerrain(cx, cz);
+    terrain.position.set(cx, 0, cz); water.position.set(cx, WATER_Y, cz);
+    rebuildScenery(cx, cz, wo);
+  }
   peaks.position.set(D.x, 0, D.z);
 }
 
@@ -449,13 +604,6 @@ function pickArena(){
   const field = [...best.R, ...shuffle(best.avail).slice(0, Math.max(0, ARENA_N - best.R.size))];
   return {qs: qsList, field};
 }
-const locLocal = v => ((v + CH/2) % CH + CH) % CH - CH/2;
-function nearScenery(x, z){
-  const lx = locLocal(x), lz = locLocal(z);
-  for (const [tx,tz] of LAYOUT.trees) if (Math.hypot(lx-tx, lz-tz) < 7) return true;
-  for (const [hx,hz] of LAYOUT.houses) if (Math.hypot(lx-hx, lz-hz) < 12) return true;
-  return false;
-}
 function buildArena(){
   clearTargets();
   const {qs: q, field} = pickArena(); qs = q;
@@ -468,15 +616,20 @@ function buildArena(){
     const x = Math.cos(a)*r, z = Math.sin(a)*r;
     if (Math.hypot(x, z-6) < 35) continue;
     if (pts.some(p => Math.hypot(p.x-x, p.z-z) < sep)) continue;
-    if (gnd && nearScenery(x, z)) continue;
-    pts.push({x, z, gnd, y: gnd ? 7.5 : 20 + Math.random()*38});
+    if (wallDist(x, z) < 20) continue;                       // 不放在岩壁旁
+    const h = groundH(x, z);
+    if (gnd){
+      if (nearScenery(x, z) || h < -0.2) continue;           // 不放在樹、房子、河裡
+      if (Math.abs(groundH(x+5, z) - h) > 3 || Math.abs(groundH(x, z+5) - h) > 3) continue;   // 不放在太陡的坡
+    }
+    pts.push({x, z, gnd, gy: Math.max(h, 0), y: gnd ? h + 7.5 : Math.min(66, Math.max(h, 0) + 20 + Math.random()*38)});
   }
   field.forEach((m, i) => {
     const p = pts[i]; if (!p) return;
     const obj = new THREE.Mesh(new THREE.PlaneGeometry(TS,TS), new THREE.MeshBasicMaterial({map:targetTex(m), transparent:true, depthWrite:false, side:THREE.DoubleSide}));
     obj.position.set(p.x, p.y, p.z); scene.add(obj);
     let pole = null;
-    if (p.gnd){ pole = new THREE.Mesh(poleGeo, poleMat); pole.position.set(p.x, 0.75, p.z); scene.add(pole); }
+    if (p.gnd){ pole = new THREE.Mesh(poleGeo, poleMat); pole.position.set(p.x, p.gy + 0.75, p.z); scene.add(pole); }
     targets.push({obj, m, pole, gnd:p.gnd});
   });
 }
@@ -503,7 +656,7 @@ function shoot(){
     hv.copy(t.obj.position).sub(camera.position);
     const tt = hv.dot(aimV); if (tt < 1) continue;
     const perp = hv.addScaledVector(aimV, -tt).length();
-    if (perp < HIT && tt < bt){ best = t; bt = tt; }
+    if (perp < HIT && tt < bt && !lineBlocked(camera.position.x, camera.position.z, t.obj.position.x, t.obj.position.z)){ best = t; bt = tt; }
   }
   const rx = Math.cos(D.yaw), rz = -Math.sin(D.yaw);
   const from = new THREE.Vector3(camera.position.x + aimV.x*3 + rx*0.9, camera.position.y + aimV.y*3 - 0.9, camera.position.z + aimV.z*3 + rz*0.9);
@@ -696,12 +849,19 @@ function nextRound(){
   const angs = shuffle([rg(-1.0,-0.4), rg(-0.3,0.3), rg(0.4,1.0)]);
   const hts = shuffle([rg(6,12), rg(16,28), rg(32,48)]);
   list.forEach((w,i) => {
-    const dist = 130 + Math.random()*40, hgt = hts[i];
-    const air = hgt > 20 || Math.random() < 0.5;
+    const hgt = hts[i];
+    let air = hgt > 20 || Math.random() < 0.5;
     const dir = f.clone().applyAxisAngle(UP, angs[i]);
+    let dist, gx, gz;
+    for (let k = 0; k < 14; k++){            // 立在地面的門不要站在河裡
+      dist = 130 + Math.random()*40; gx = D.x + dir.x*dist; gz = D.z + dir.z*dist;
+      if (air || !isWater(gx, gz)) break;
+      if (k === 13) air = true;
+    }
+    const gy = Math.min(Math.max(groundH(gx, gz), 0) + hgt, 64);   // 高度是離地高度，山丘上的門會跟著抬高
     const obj = makeGate(w, hgt, air);
-    obj.position.set(D.x + dir.x*dist, hgt, D.z + dir.z*dist);
-    obj.lookAt(D.x, hgt, D.z); obj.updateMatrixWorld(true);
+    obj.position.set(gx, gy, gz);
+    obj.lookAt(D.x, gy, D.z); obj.updateMatrixWorld(true);
     scene.add(obj); gates.push({obj, word:w, prev:null, air});
     gFar = Math.max(gFar, dist*Math.cos(angs[i]));
   });
@@ -786,7 +946,9 @@ function update(dt, now){
     D.vy += (altIn*8 - D.vy)*k;
     const fx = -Math.sin(D.yaw), fz = -Math.cos(D.yaw), rx = Math.cos(D.yaw), rz = -Math.sin(D.yaw);
     D.x += (fx*D.vf + rx*D.vs)*dt; D.z += (fz*D.vf + rz*D.vs)*dt; D.y += D.vy*dt;
-    if (D.y < 1.5){ D.y = 1.5; if (D.vy < 0) D.vy = 0; }
+    if (cfg.mode === 'shoot') collideWalls(now);
+    const floorY = Math.max(groundH(D.x, D.z), 0) + 1.5;     // 不能穿進山丘
+    if (D.y < floorY){ D.y = floorY; if (D.vy < 0) D.vy = 0; }
     if (D.y > 70){ D.y = 70; if (D.vy > 0) D.vy = 0; }
     D.pitch += ((-D.vf/16*0.1) - D.pitch)*k; D.roll += ((-D.vs/10*0.14) - D.roll)*k;
     playT += dt;
