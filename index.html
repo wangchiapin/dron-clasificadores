@@ -131,6 +131,9 @@ select{font:inherit;font-size:15px;min-height:36px;color:#b6f5a4;background:#101
     <div id="gateOpts">
       <h2>主題 / Tema</h2>
       <div class="chips" id="sets"></div>
+      <h2>飛行速度 / Velocidad</h2>
+      <div class="chips" id="speeds"></div>
+      <div class="note">無人機會自動往前飛，只能在左右各 60 度內轉彎、不能回頭。門有的連到地面、有的飄在空中，高低落差很大，要上下調整高度。飛過三個門還沒選，這題就錯過了（不扣命、不得分）。</div>
     </div>
     <h2>操作 / Control</h2>
     <div class="chips" id="ctrls"></div>
@@ -226,7 +229,7 @@ function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a
 const srnd = mulberry(20261027);
 const shuffle = a => { a = a.slice(); for (let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];} return a; };
 
-const cfg = {mode:'shoot', group:'all', mw:'all', set:'', ctrl:'stick', pinyin:false, listen:false, invF:false, invR:false};
+const cfg = {speed:'mid', mode:'shoot', group:'all', mw:'all', set:'', ctrl:'stick', pinyin:false, listen:false, invF:false, invR:false};
 function itemPool(){ return MBANK.filter(it => (cfg.group === 'all' || it.g === cfg.group) && (cfg.mw === 'all' || it.a.includes(cfg.mw))); }
 function scopeLabel(){ return cfg.mw !== 'all' ? `量詞「${cfg.mw}」` : (cfg.group === 'all' ? '全部量詞' : cfg.group); }
 
@@ -340,7 +343,7 @@ function wordTex(w){
 const frameMat = new THREE.MeshStandardMaterial({color:0xcfd6d4, metalness:0.5, roughness:0.45});
 const glowMat = new THREE.MeshBasicMaterial({color:0xa8e8ff});
 const poleMat = new THREE.MeshStandardMaterial({color:0x2a3033, roughness:0.8});
-function makeGate(w, hgt){
+function makeGate(w, hgt, air){
   const g = new THREE.Group();
   const box = (mat,sx,sy,sz,x,y) => { const m = new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz), mat); m.position.set(x,y,0); g.add(m); };
   box(frameMat, GW+1.2, 0.6, 0.6, 0, GH/2+0.3);
@@ -352,7 +355,7 @@ function makeGate(w, hgt){
   box(glowMat, 0.14, GH, 0.14, -GW/2+0.07, 0);
   box(glowMat, 0.14, GH, 0.14, GW/2-0.07, 0);
   const ph = Math.max(hgt - GH/2 - 0.6, 0.5);
-  for (const sx of [-1,1]){
+  for (const sx of (air ? [] : [-1,1])){
     const p = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.28,ph,6), poleMat);
     p.position.set(sx*(GW/2+0.3), -GH/2-0.6-ph/2, 0); g.add(p);
   }
@@ -651,6 +654,8 @@ function refreshVoiceNote(){
 /* ---------- 遊戲流程 ---------- */
 let state = 'menu', round = 0, score = 0, lives = 3, correct = 0, target = null, prevTarget = null, fbUntil = 0, fbLose = false, playT = 0;
 const tmpV = new THREE.Vector3();
+const GTURN = 1.047, SPEEDS = {slow:10, mid:14, fast:20};   // 穿過門模式：左右各 60 度；自動前進速度（公尺／秒）
+let gHead = 0, gFar = 0; const gP0 = new THREE.Vector2();
 
 function lifeHTML(){ let h = ''; for (let i=0;i<3;i++) h += `<i class="${i<lives?'on':''}"></i>`; $('lf').innerHTML = h; }
 function hudStats(){
@@ -683,17 +688,22 @@ function nextRound(){
   prevTarget = target = t;
   const others = shuffle(words.filter(w => w !== t)).slice(0,2);
   const list = shuffle([t, ...others]);
-  // 生出三個門
+  // 生出三個門：在機頭方向左右各 60 度內（300°～60°），遠一點，高低落差大；有的連到地面、有的飄在空中
   clearGates();
+  gHead = D.yaw; gP0.set(D.x, D.z); gFar = 0;
   const f = new THREE.Vector3(-Math.sin(D.yaw), 0, -Math.cos(D.yaw));
-  const angs = shuffle([-0.6, 0, 0.6]);
+  const rg = (lo, hi) => lo + Math.random()*(hi - lo);
+  const angs = shuffle([rg(-1.0,-0.4), rg(-0.3,0.3), rg(0.4,1.0)]);
+  const hts = shuffle([rg(6,12), rg(16,28), rg(32,48)]);
   list.forEach((w,i) => {
-    const dist = 60 + Math.random()*25, hgt = 6 + Math.random()*10;
+    const dist = 130 + Math.random()*40, hgt = hts[i];
+    const air = hgt > 20 || Math.random() < 0.5;
     const dir = f.clone().applyAxisAngle(UP, angs[i]);
-    const obj = makeGate(w, hgt);
+    const obj = makeGate(w, hgt, air);
     obj.position.set(D.x + dir.x*dist, hgt, D.z + dir.z*dist);
     obj.lookAt(D.x, hgt, D.z); obj.updateMatrixWorld(true);
-    scene.add(obj); gates.push({obj, word:w, prev:null});
+    scene.add(obj); gates.push({obj, word:w, prev:null, air});
+    gFar = Math.max(gFar, dist*Math.cos(angs[i]));
   });
   state = 'play'; hudStats(); setPrompt();
   if (cfg.listen) say(t.zh);
@@ -712,6 +722,14 @@ function judge(g){
     fbLose = lives <= 0;
   }
   state = 'fb'; fbUntil = performance.now() + 1800; hudStats();
+}
+function checkMiss(){
+  // 飛過最遠的那個門還沒選：錯過答題機會（不扣命、不得分）
+  const fx = -Math.sin(gHead), fz = -Math.cos(gHead);
+  if ((D.x - gP0.x)*fx + (D.z - gP0.y)*fz < gFar + 18) return;
+  fbLose = false; state = 'fb'; fbUntil = performance.now() + 2400;
+  feedback(false, '喔喔！你錯過答題機會了！', `要找的是「${target.zh}」${target.es}`);
+  beep(220, 0.25, 'triangle', 0.05); hudStats();
 }
 function checkGates(){
   tmpV.set(D.x, D.y, D.z);
@@ -758,9 +776,10 @@ function update(dt, now){
     const useTilt = cfg.ctrl === 'tilt';
     const yawIn = clamp(L.x + ka('ArrowRight','ArrowLeft') + ka('KeyE','KeyQ'));
     const altIn = clamp(L.y + ka('ArrowUp','ArrowDown'));
-    const fwdIn = clamp((useTilt ? tilt.f : R.y) + ka('KeyW','KeyS'));
+    const fwdIn = cfg.mode === 'gate' ? SPEEDS[cfg.speed]/16 : clamp((useTilt ? tilt.f : R.y) + ka('KeyW','KeyS'));
     const strIn = clamp((useTilt ? tilt.r : R.x) + ka('KeyD','KeyA'));
     D.yaw -= yawIn*1.4*dt;
+    if (cfg.mode === 'gate') D.yaw = clamp(D.yaw, gHead - GTURN, gHead + GTURN);
     const k = 1 - Math.exp(-3.5*dt);
     D.vf += (fwdIn*(fwdIn > 0 ? 16 : 8) - D.vf)*k;
     D.vs += (strIn*10 - D.vs)*k;
@@ -771,7 +790,7 @@ function update(dt, now){
     if (D.y > 70){ D.y = 70; if (D.vy > 0) D.vy = 0; }
     D.pitch += ((-D.vf/16*0.1) - D.pitch)*k; D.roll += ((-D.vs/10*0.14) - D.roll)*k;
     playT += dt;
-    if (state === 'play') checkGates();
+    if (state === 'play' && cfg.mode === 'gate'){ checkGates(); if (state === 'play') checkMiss(); }
     else if (state === 'fb' && now > fbUntil){
       $('fb').className = '';
       if (fbLose) endGame(false); else nextRound();
@@ -816,6 +835,8 @@ function mkChip(box, v, zh, es, fn){
   const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.dataset.v = v;
   b.innerHTML = `${zh}<small>${es || ''}</small>`; b.onclick = fn; box.appendChild(b);
 }
+const speedBox = $('speeds');
+[['slow','慢','Lento'],['mid','中','Normal'],['fast','快','Rápido']].forEach(([v,zh,es]) => mkChip(speedBox, v, zh, es, () => { cfg.speed = v; refreshMenu(); }));
 [['stick','搖桿','Joystick'],['tilt','傾斜','Inclinar']].forEach(([v,zh,es]) => mkChip(ctrlBox, v, zh, es, () => { cfg.ctrl = v; refreshMenu(); }));
 [['shoot','射擊量詞','Tiro de clasificadores'],['gate','飛過門','Puertas de palabras']].forEach(([v,zh,es]) => mkChip(modeBox, v, zh, es, () => { cfg.mode = v; refreshMenu(); }));
 function buildDataMenu(){
@@ -832,6 +853,7 @@ mwSel.onchange = () => { cfg.mw = mwSel.value; if (cfg.mw !== 'all') cfg.group =
 function refreshMenu(){
   setBox.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b.dataset.v === cfg.set));
   ctrlBox.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b.dataset.v === cfg.ctrl));
+  speedBox.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b.dataset.v === cfg.speed));
   modeBox.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b.dataset.v === cfg.mode));
   grpBox.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b.dataset.v === cfg.group && cfg.mw === 'all'));
   mwSel.value = cfg.mw;
