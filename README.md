@@ -45,3 +45,12 @@ Juego web para practicar los clasificadores (量詞) del chino con un dron.
 - 不使用共用設定（只有繁體中文介面）。
 - **遊玩紀錄**：遊戲代號 `dron`，寫到 Firebase 專案 `memorma-24dab` 的 `plays`、`visits`（訪客、每局開始、玩完）。沒有排行榜。
 - 2026-10-28 由「無人機飛行遊戲」改名為「量詞空戰」。
+
+## 測試
+
+`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers python3 tests/test_game.py`（Python + Playwright；擋掉外部網路，用假的 Firebase 和假的語音，不碰真的資料庫）
+
+- 目前 123 項檢查（2026-10-30 建立）。
+- 涵蓋：題庫載入與壞資料、出題規則（每題只有一個標準答案、答案一定在場上）、真的開火答對／答錯／提示 50 分、彈匣與換彈、射擊與飛過門兩種玩法打完、三個主題、拼音與聽力模式、傾斜操作與退回搖桿、鍵盤。因為 Chrome 不讓 file:// 讀題庫，且軟體繪圖很慢，測試端會換掉題庫網址並降低繪圖頻率（遊戲檔不動）。
+- 改了遊戲的計分、設定、排行榜或畫面文字後，推上去之前先跑一次。
+- 驗證方式：另外複製一份遊戲、故意改壞一個地方，測試會出現 FAIL。
