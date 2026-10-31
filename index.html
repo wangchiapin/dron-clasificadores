@@ -839,7 +839,7 @@ addEventListener('keydown', e => {
   if (e.code === 'Space' && !e.repeat) shoot();
   if (e.code === 'KeyR' && !e.repeat) startReload();
 });
-$('c').addEventListener('pointerdown', e => { e.preventDefault(); shoot(); });
+$('c').addEventListener('pointerdown', e => { e.preventDefault(); if (e.pointerType === 'mouse') shoot(); });   // 只有電腦滑鼠點畫面才射擊；手機觸控要按射擊鈕
 $('fire').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); shoot(); });
 addEventListener('keyup', e => keys.delete(e.code));
 const ka = (p,n) => (keys.has(p)?1:0) - (keys.has(n)?1:0);

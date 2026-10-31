@@ -211,9 +211,13 @@ with sync_playwright() as p:
     R.check(pg.inner_text('#ammo') == '●●●●●●', '滿彈時按 R 沒有作用')
     # 滑鼠與「射擊」鈕也能射
     pg.mouse.click(450, 240); pg.wait_for_timeout(100)
-    R.check(J(pg, "return J.ammo") == 5, '點畫面射擊')
-    pg.dispatch_event('#fire', 'pointerdown'); pg.wait_for_timeout(100)
-    R.check(J(pg, "return J.ammo") == 4, '按「射擊」鈕射擊')
+    R.check(J(pg, "return J.ammo") == 5, '電腦滑鼠點畫面射擊')
+    pg.dispatch_event('#c', 'pointerdown', {'pointerType': 'touch'}); pg.wait_for_timeout(100)
+    R.check(J(pg, "return J.ammo") == 5, '手機觸控點畫面不會射擊')
+    pg.dispatch_event('#c', 'pointerdown', {'pointerType': 'pen'}); pg.wait_for_timeout(100)
+    R.check(J(pg, "return J.ammo") == 5, '手寫筆點畫面不會射擊')
+    pg.dispatch_event('#fire', 'pointerdown', {'pointerType': 'touch'}); pg.wait_for_timeout(100)
+    R.check(J(pg, "return J.ammo") == 4, '手機按「射擊」鈕射擊')
     b.close()
 
     # 全部答對 → 任務完成
