@@ -158,6 +158,7 @@ select{font:inherit;font-size:15px;min-height:36px;color:#b6f5a4;background:#101
     <div class="sub" id="endC"></div>
     <div class="btns">
       <button type="button" class="chip on" id="again">再玩一次<small>Jugar de nuevo</small></button>
+      <button type="button" class="chip" id="shareBtn" hidden>分享成績<small>Compartir resultado</small></button>
       <button type="button" class="chip" id="toMenu">回選單<small>Menú</small></button>
     </div>
     <div class="cpr">© 2026 @cadadiaunosminutos_ben_chino ｜ 保留所有權利 / Todos los derechos reservados</div>
@@ -1023,6 +1024,7 @@ function endGame(win){
   $('endS').textContent = String(score);
   $('endC').textContent = `答對 ${correct} / ${TOTAL}　　${cfg.mode === 'shoot' ? scopeLabel() : cfg.set}`;
   $('end').hidden = false;
+  $('shareBtn').hidden = !(score > 0); setShareLabel('share');   // 分享成績：0 分不顯示
   try{HGPlays.end({score});}catch(e){}
 }
 
@@ -1151,6 +1153,43 @@ $('toMenu').onclick = () => { $('end').hidden = true; state = 'menu'; $('menu').
 $('menuBtn').onclick = () => { clearGates(); clearTargets(); state = 'menu'; $('fb').className = ''; $('menu').hidden = false; };
 $('spk').onclick = () => { if (target) say(cfg.mode === 'shoot' ? target.n : target.zh); };
 
+/* ---------- 分享成績（統一規則見 game-kit parts/share.js：結算畫面「再玩一次」之後、「回選單」之前；0 分不顯示）---------- */
+/* SHARE-BEGIN（HGShare：來自 game-kit parts/share.js） */
+const HGShare = (() => {
+  async function copyText(s) {
+    try { if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(s); return true; } } catch (e) {}
+    try {
+      const ta = document.createElement('textarea'); ta.value = s; ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+      document.body.appendChild(ta); ta.select();
+      const r = document.execCommand('copy'); ta.remove(); return !!r;
+    } catch (e) { return false; }
+  }
+  async function send({ title, text, url }) {
+    if (navigator.share) {
+      try { await navigator.share({ title, text, url }); return 'shared'; }
+      catch (e) { if (e && e.name === 'AbortError') return 'aborted'; }   // 其他錯誤改走複製
+    }
+    return (await copyText(text + '\n' + url)) ? 'copied' : 'failed';
+  }
+  return { copyText, send };
+})();
+/* SHARE-END */
+const SHARE_URL = 'https://wangchiapin.github.io/dron-clasificadores/?ref=share';   // 公開頁＋分享記號
+const SHARE_LABEL = { share: ['分享成績', 'Compartir resultado'], copied: ['已複製，可以貼給朋友', 'Copiado, ¡pégalo a un amigo!'], failed: ['複製失敗', 'No se pudo copiar'] };
+function setShareLabel(k){ const b = $('shareBtn'); b.textContent = SHARE_LABEL[k][0]; const s = document.createElement('small'); s.textContent = SHARE_LABEL[k][1]; b.appendChild(s); }
+function shareMessage(){   // 這款遊戲沒有暱稱與語言設定：一句話固定用西文＋遊戲中文名
+  return '¡Saqué ' + score + ' puntos en 量詞空戰 (¡Dispara al clasificador!)! ¿Puedes superarme?';
+}
+let shareBusy = false, shareTimer = 0;
+$('shareBtn').onclick = async () => {
+  if (shareBusy) return; shareBusy = true;
+  try{
+    const r = await HGShare.send({ title: '量詞空戰 · ¡Dispara al clasificador!', text: shareMessage(), url: SHARE_URL });
+    if (r === 'copied' || r === 'failed'){ setShareLabel(r); clearTimeout(shareTimer); shareTimer = setTimeout(() => setShareLabel('share'), 2200); }
+  } finally { shareBusy = false; }
+};
+
 /* ---------- 開始 ---------- */
 (async () => { try { await document.fonts.load('700 100px "Noto Sans TC"', '蘋果香蕉'); } catch (e) {} })();
 resize(); applyCtrlUI(); applyModeUI(); lifeHTML();
@@ -1188,6 +1227,19 @@ loadBank().then(warn => {
     try { return String(Intl.DateTimeFormat().resolvedOptions().timeZone || '').slice(0, 64); } catch (e) { return ''; }
   }
   var TZ = tzName();
+
+  /* ref：這個訪客是從哪裡進來的記號（例如 ?ref=share＝朋友分享的連結）。
+     只收英數字、底線、連字號，最長 16 字，統一小寫；其他一律忽略（規則也限制 1～16 字串）。
+     網址有 ?ref= 就記下並暫存在這個分頁（sessionStorage，同分頁的 iframe 讀得到、分頁關掉就消失）；
+     沒有就讀暫存。所以「首頁收到記號、遊戲頁（iframe）才寫紀錄」也記得到。 */
+  function cleanRef(x) { x = String(x == null ? '' : x).trim().toLowerCase(); return /^[a-z0-9_-]{1,16}$/.test(x) ? x : ''; }
+  function refName() {
+    var r = '';
+    try { r = cleanRef(new URLSearchParams(location.search).get('ref')); } catch (e) {}
+    try { if (r) sessionStorage.setItem('hg.ref', r); else r = cleanRef(sessionStorage.getItem('hg.ref')); } catch (e) {}
+    return r;
+  }
+  var REF = refName();
 
   function gid() { try { return (HG.gameFn ? HG.gameFn() : GAME) || GAME; } catch (e) { return GAME; } } // taiwan-life 這類共用引擎的遊戲可改寫 HGPlays.gameFn
   function day() { // 以台灣時間（UTC+8）算「哪一天」，方便老師對帳
@@ -1229,6 +1281,7 @@ loadBank().then(warn => {
         var id = d + '_' + g + '_' + L.uid;
         var v = { game: g, day: d, uid: L.uid, at: L.F.serverTimestamp() };
         if (TZ) v.tz = TZ;
+        if (REF) v.ref = REF;
         return L.F.setDoc(L.F.doc(L.db, 'visits', id), v)
           .then(function () { ls(key, d); });
       }).catch(function () {});
@@ -1241,6 +1294,7 @@ loadBank().then(warn => {
         var data = { game: gid(), level: mine.level, uid: L.uid, name: getName(name), day: day(),
                      startedAt: L.F.serverTimestamp(), done: false };
         if (TZ) data.tz = TZ;
+        if (REF) data.ref = REF;
         return L.F.addDoc(L.F.collection(L.db, 'plays'), data).then(function (ref) {
           mine.id = ref.id; if (mine.pendingEnd) HG._finish(mine, mine.pendingEnd);
         });
